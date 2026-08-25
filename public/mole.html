@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Be a Mole — MavMole</title>
+    <link rel="stylesheet" href="/css/style.css">
+  </head>
+  <body>
+    <main>
+      <p><a href="/">← Home</a></p>
+      <h1>Be a Mole</h1>
+      <p>This page forwards binary WebSocket frames from Mission Planner to the public MavMole relay.</p>
+
+      <p class="notice">
+        Open the browser developer tools (F12 → Console) before connecting. An HTTPS browser may ask for local-network access or block an insecure local WebSocket.
+      </p>
+
+      <section class="panel">
+        <form id="mole-form">
+          <label for="local-url">Mission Planner WebSocket URL</label>
+          <input id="local-url" name="local-url" type="url" value="ws://127.0.0.1:56781/websocket/raw" required spellcheck="false">
+          <div class="actions">
+            <button id="connect-button" type="submit">Connect and forward</button>
+            <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
+          </div>
+        </form>
+
+        <dl class="status-grid">
+          <dt>Local WebSocket</dt>
+          <dd id="local-status" class="status" data-state="idle">Disconnected</dd>
+          <dt>MavMole relay</dt>
+          <dd id="relay-status" class="status" data-state="idle">Disconnected</dd>
+          <dt>Forwarding</dt>
+          <dd id="forwarding-status" class="status" data-state="idle">Stopped</dd>
+          <dt>Frames</dt>
+          <dd id="frame-count">0</dd>
+          <dt>Data</dt>
+          <dd id="byte-count">0 B</dd>
+          <dt>Current rate</dt>
+          <dd id="byte-rate">0 B/s</dd>
+          <dt>Dropped locally</dt>
+          <dd id="dropped-count">0</dd>
+        </dl>
+      </section>
+
+      <p class="muted">MavMole does not parse or change MAVLink packets. Text WebSocket frames are ignored.</p>
+    </main>
+    <script src="/js/logger.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/mole.js"></script>
+  </body>
+</html>

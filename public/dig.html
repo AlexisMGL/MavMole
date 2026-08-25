@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Dig a Molehill — MavMole</title>
+    <link rel="stylesheet" href="/css/style.css">
+  </head>
+  <body>
+    <main>
+      <p><a href="/">← Home</a></p>
+      <h1>Dig a Molehill</h1>
+      <p>Connect to the relay and verify that binary data arrives from the Mole.</p>
+
+      <section class="panel">
+        <div class="actions">
+          <button id="connect-button" type="button">Connect</button>
+          <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
+        </div>
+
+        <dl class="status-grid">
+          <dt>MavMole relay</dt>
+          <dd id="relay-status" class="status" data-state="idle">Disconnected</dd>
+          <dt>Stream</dt>
+          <dd id="receiving-status" class="status" data-state="idle">Stopped</dd>
+          <dt>Frames</dt>
+          <dd id="frame-count">0</dd>
+          <dt>Data</dt>
+          <dd id="byte-count">0 B</dd>
+          <dt>Current rate</dt>
+          <dd id="byte-rate">0 B/s</dd>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <h2>Last binary frame</h2>
+        <pre id="last-frame">No frame received yet.</pre>
+      </section>
+
+      <p class="muted">The first 32 bytes are shown as hexadecimal only for diagnostics. V1 does not decode MAVLink.</p>
+    </main>
+    <script src="/js/logger.js"></script>
+    <script src="/js/app.js"></script>
+    <script src="/js/digger.js"></script>
+  </body>
+</html>
