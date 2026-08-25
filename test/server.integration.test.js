@@ -37,6 +37,10 @@ test("serves the app and relays a binary frame end to end", async (context) => {
   assert.equal(healthResponse.status, 200);
   assert.equal((await healthResponse.json()).status, "ok");
 
+  const assetResponse = await fetch(`${httpUrl}/assets/brand/mavmole-banner.png`);
+  assert.equal(assetResponse.status, 200);
+  assert.match(assetResponse.headers.get("content-type"), /^image\/png/);
+
   const digger = await openWebSocket(`${wsUrl}/ws?role=digger`);
   const mole = await openWebSocket(`${wsUrl}/ws?role=mole`);
   context.after(() => {

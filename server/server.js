@@ -36,6 +36,7 @@ function createMavMoleServer() {
   const connections = new ConnectionRegistry();
   const relay = new BinaryRelay(connections);
   const publicDirectory = path.join(__dirname, "..", "public");
+  const assetsDirectory = path.join(__dirname, "..", "assets");
 
   app.disable("x-powered-by");
 
@@ -56,6 +57,7 @@ function createMavMoleServer() {
     response.sendFile(path.join(publicDirectory, "dig.html"));
   });
 
+  app.use("/assets", express.static(assetsDirectory));
   app.use(express.static(publicDirectory));
 
   httpServer.on("upgrade", (request, socket, head) => {

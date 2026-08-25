@@ -3,27 +3,69 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>MavMole</title>
+    <meta name="description" content="Share a raw MAVLink WebSocket stream between two browsers.">
+    <title>MavMole — Share MAVLink anywhere</title>
+    <link rel="icon" href="/assets/icons/mole-circle.png" type="image/png">
     <link rel="stylesheet" href="/css/style.css">
   </head>
-  <body>
-    <main>
-      <h1>MavMole</h1>
-      <p>Share a raw MAVLink WebSocket stream with another browser.</p>
+  <body class="home-page">
+    <img class="side-banner side-banner-left" src="/assets/banners/side-left.png" alt="" aria-hidden="true">
+    <img class="side-banner side-banner-right" src="/assets/banners/side-right.png" alt="" aria-hidden="true">
 
-      <section class="panel">
-        <h2>Be a Mole</h2>
-        <p>Connect this browser to Mission Planner and forward its binary stream.</p>
-        <a class="button" href="/mole">Open Mole page</a>
+    <main class="site-shell">
+      <header class="hero-card">
+        <h1 class="sr-only">MavMole</h1>
+        <img class="brand-lockup" src="/assets/brand/mavmole-lockup.png" alt="MavMole — Share MAVLink anywhere">
+        <p class="eyebrow">Browser-to-browser MAVLink relay</p>
+        <p class="hero-copy">Open a tunnel from Mission Planner to another browser. No account, no MAVLink parsing, no installation on the viewer side.</p>
+
+        <div class="relay-map" aria-label="Mission Planner data travels through MavMole to the viewer">
+          <span>Mission Planner</span>
+          <i aria-hidden="true">→</i>
+          <strong>MavMole</strong>
+          <i aria-hidden="true">→</i>
+          <span>Viewer</span>
+        </div>
+      </header>
+
+      <section class="role-grid" aria-label="Choose a role">
+        <article class="role-card mole-role">
+          <div class="role-card-copy">
+            <span class="role-badge">Publisher</span>
+            <h2>Be a Mole</h2>
+            <p>Connect this browser to Mission Planner and send its raw binary stream into the tunnel.</p>
+            <a class="button" href="/mole">Start sharing <span aria-hidden="true">→</span></a>
+          </div>
+          <img class="role-icon" src="/assets/icons/mole-circle.png" alt="MavMole mascot">
+        </article>
+
+        <article class="role-card digger-role">
+          <div class="role-card-copy">
+            <span class="role-badge">Viewer</span>
+            <h2>Dig a Molehill</h2>
+            <p>Join the public relay, watch the live counters and verify that binary frames arrive.</p>
+            <a class="button button-accent" href="/dig">Watch the stream <span aria-hidden="true">→</span></a>
+          </div>
+          <img class="role-icon molehill-icon" src="/assets/icons/molehill.png" alt="Molehill with a flag">
+        </article>
       </section>
 
-      <section class="panel">
-        <h2>Dig a Molehill</h2>
-        <p>Connect this browser to the relay and watch the raw stream counters.</p>
-        <a class="button" href="/dig">Open Digger page</a>
+      <section class="prototype-note">
+        <div>
+          <p class="eyebrow">Prototype V1</p>
+          <h2>One direct tunnel.</h2>
+          <p>One Mole and one Digger can connect at a time. Data is forwarded byte-for-byte and never stored.</p>
+        </div>
+        <img class="note-mascot" src="/assets/mascot/mole-transparent.png" alt="MavMole mascot emerging from a tunnel">
       </section>
-
-      <p class="muted">V1 supports one Mole and one Digger. No account, password, storage, or MAVLink parsing.</p>
     </main>
+
+    <footer class="tunnel-footer">
+      <span>Raw WebSocket transport</span>
+      <span>•</span>
+      <span>No database</span>
+      <span>•</span>
+      <span>No MAVLink parsing</span>
+    </footer>
   </body>
 </html>

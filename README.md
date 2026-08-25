@@ -25,6 +25,24 @@ Navigateur Digger
 - logs détaillés dans la console du navigateur (F12 → Console) et sur le serveur ;
 - le dernier paquet reçu est affiché en hexadécimal côté Digger, sans décodage MAVLink.
 
+## Identité visuelle
+
+La planche graphique fournie est conservée dans `assets/source/` et découpée en assets nommés dans `assets/brand`, `assets/icons`, `assets/banners`, `assets/backgrounds`, `assets/mascot` et `assets/animations`. Les animations sont disponibles sous forme de huit PNG individuels et de sprite strips directement utilisables en CSS.
+
+Pour reconstruire les découpes de manière déterministe sous Windows :
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\extract-assets.ps1
+```
+
+Pour lancer le serveur et capturer automatiquement les vues desktop/mobile avec Edge headless :
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\capture-ui.ps1
+```
+
+Le détail des fichiers et dimensions est dans `assets/README.md`.
+
 Quand un second client prend le même rôle, il remplace le premier. L’ancienne connexion reçoit le code de fermeture `4001`.
 
 ## Lancer en local
