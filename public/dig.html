@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Receive a raw binary stream from the MavMole relay.">
-    <title>Dig a Molehill — MavMole</title>
+    <meta name="description" content="View live MAVLink flight telemetry from a MavMole relay.">
+    <title>Molehill Telemetry — MavMole</title>
     <link rel="icon" href="/assets/icons/molehill.png" type="image/png">
     <link rel="stylesheet" href="/css/style.css">
   </head>
@@ -20,79 +20,250 @@
       </nav>
     </header>
 
-    <main class="tool-shell">
-      <header class="page-heading">
+    <main class="tool-shell dashboard-shell">
+      <header class="page-heading dashboard-page-heading">
         <div>
-          <p class="eyebrow">Viewer workspace</p>
-          <h1>Monitor the stream</h1>
-          <p>Join the far end of the tunnel and confirm that raw MAVLink data is arriving live.</p>
+          <p class="eyebrow">Molehill · Live viewer</p>
+          <h1>Flight telemetry</h1>
+          <p>Follow the aircraft position and essential flight data decoded locally from the incoming MAVLink stream.</p>
         </div>
-        <span class="mode-badge">Digger</span>
+        <button id="customize-dashboard-button" class="secondary customize-button" type="button">
+          <span aria-hidden="true">☷</span> Customize
+        </button>
       </header>
 
-      <div class="workspace-grid">
-        <section class="control-panel connect-panel" aria-labelledby="connect-title">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Public relay</p>
-              <h2 id="connect-title">Connection</h2>
-            </div>
-            <span class="panel-number">01</span>
+      <section class="relay-toolbar" aria-label="Relay connection">
+        <div class="connection-states">
+          <div>
+            <span class="connection-label">Relay</span>
+            <span id="relay-status" class="status" data-state="idle" aria-live="polite">Disconnected</span>
           </div>
-          <p>Connect this browser as the active Digger. A new Digger replaces the previous viewer.</p>
-          <div class="actions">
-            <button id="connect-button" type="button">Connect to tunnel</button>
-            <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
+          <div>
+            <span class="connection-label">Stream</span>
+            <span id="receiving-status" class="status" data-state="idle" aria-live="polite">Stopped</span>
           </div>
-        </section>
+        </div>
+        <div class="toolbar-actions">
+          <button id="connect-button" type="button">Connect to tunnel</button>
+          <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
+        </div>
+      </section>
 
-        <section class="telemetry-panel" aria-labelledby="stream-status-title">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Live diagnostics</p>
-              <h2 id="stream-status-title">Stream status</h2>
-            </div>
-            <span class="live-chip">Live</span>
+      <section class="flight-dashboard" aria-labelledby="flight-dashboard-title">
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">Aircraft overview</p>
+            <h2 id="flight-dashboard-title">Molehill dashboard</h2>
           </div>
+          <span id="telemetry-freshness" class="telemetry-freshness" data-state="waiting">Waiting for MAVLink</span>
+        </div>
 
-          <dl class="status-grid">
-            <div>
-              <dt>MavMole relay</dt>
-              <dd id="relay-status" class="status" data-state="idle" aria-live="polite">Disconnected</dd>
-            </div>
-            <div>
-              <dt>Binary stream</dt>
-              <dd id="receiving-status" class="status" data-state="idle" aria-live="polite">Stopped</dd>
-            </div>
-          </dl>
+        <div id="telemetry-grid" class="telemetry-dashboard" data-layout="balanced">
+          <article class="telemetry-widget position-widget" data-widget="position">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Navigation</span>
+                <h3>Position</h3>
+              </div>
+              <a id="map-link" class="widget-link" aria-disabled="true" target="_blank" rel="noreferrer">Open map ↗</a>
+            </header>
 
+            <div class="position-map">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Local aircraft trail">
+                <defs>
+                  <pattern id="map-grid-small" width="10" height="10" patternUnits="userSpaceOnUse">
+                    <path d="M 10 0 L 0 0 0 10" fill="none" stroke="currentColor" stroke-width="0.25"></path>
+                  </pattern>
+                  <pattern id="map-grid-large" width="50" height="50" patternUnits="userSpaceOnUse">
+                    <rect width="50" height="50" fill="url(#map-grid-small)"></rect>
+                    <path d="M 50 0 L 0 0 0 50" fill="none" stroke="currentColor" stroke-width="0.45"></path>
+                  </pattern>
+                </defs>
+                <rect class="map-grid-fill" width="100" height="100" fill="url(#map-grid-large)"></rect>
+                <polyline id="position-trail" class="position-trail" points=""></polyline>
+                <g id="vehicle-marker" class="vehicle-marker" hidden>
+                  <circle r="5.2"></circle>
+                  <path d="M 0 -4 L 3.1 3.8 L 0 2.2 L -3.1 3.8 Z"></path>
+                </g>
+              </svg>
+              <span class="north-indicator">N</span>
+              <span class="trail-label">Local trail</span>
+              <div id="position-empty" class="widget-empty">
+                <span class="empty-pulse" aria-hidden="true"></span>
+                Waiting for a valid position
+              </div>
+            </div>
+
+            <dl class="position-readout">
+              <div><dt>Latitude</dt><dd id="latitude-value">—</dd></div>
+              <div><dt>Longitude</dt><dd id="longitude-value">—</dd></div>
+              <div><dt>Heading</dt><dd id="heading-value">—</dd></div>
+            </dl>
+          </article>
+
+          <article class="telemetry-widget airspeed-widget" data-widget="airspeed">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Motion</span>
+                <h3>Airspeed</h3>
+              </div>
+              <span class="widget-symbol" aria-hidden="true">AS</span>
+            </header>
+            <div class="airspeed-gauge">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="gauge-track" cx="60" cy="60" r="48" pathLength="100"></circle>
+                <circle id="airspeed-arc" class="gauge-value" cx="60" cy="60" r="48" pathLength="100"></circle>
+              </svg>
+              <div class="gauge-readout">
+                <strong id="airspeed-value">—</strong>
+                <span id="airspeed-unit">m/s</span>
+              </div>
+            </div>
+            <p id="airspeed-source" class="widget-source">No airspeed message</p>
+          </article>
+
+          <article class="telemetry-widget agl-widget" data-widget="agl">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Clearance</span>
+                <h3>AGL altitude</h3>
+              </div>
+              <span class="widget-symbol" aria-hidden="true">AGL</span>
+            </header>
+            <div class="altitude-display">
+              <div class="altitude-value">
+                <strong id="agl-value">—</strong>
+                <span id="agl-unit">m</span>
+              </div>
+              <div class="altitude-scale" aria-hidden="true">
+                <div id="agl-fill" class="altitude-fill"></div>
+                <span></span><span></span><span></span><span></span><span></span>
+              </div>
+            </div>
+            <p id="agl-source" class="widget-source">No AGL source</p>
+          </article>
+
+          <article class="telemetry-widget battery-widget" data-widget="battery">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Power system</span>
+                <h3>Battery</h3>
+              </div>
+              <span id="battery-remaining" class="battery-percentage">—</span>
+            </header>
+            <dl class="battery-values">
+              <div><dt>Voltage</dt><dd id="battery-voltage">—</dd></div>
+              <div><dt>Current <span title="Current is displayed as an absolute value">|A|</span></dt><dd id="battery-current">—</dd></div>
+              <div><dt>Power</dt><dd id="battery-power">—</dd></div>
+            </dl>
+            <div class="battery-track" role="meter" aria-label="Battery remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+              <div id="battery-bar" class="battery-bar"></div>
+            </div>
+            <p id="battery-source" class="widget-source">No battery message</p>
+          </article>
+        </div>
+      </section>
+
+      <details class="raw-diagnostics">
+        <summary>
+          <span>
+            <strong>Raw stream diagnostics</strong>
+            <small>Transport counters and last binary frame</small>
+          </span>
+          <span aria-hidden="true">+</span>
+        </summary>
+        <div class="diagnostics-content">
           <dl class="metrics-grid three-metrics">
-            <div><dt>Frames</dt><dd id="frame-count">0</dd></div>
+            <div><dt>WebSocket frames</dt><dd id="frame-count">0</dd></div>
             <div><dt>Data</dt><dd id="byte-count">0 B</dd></div>
             <div><dt>Current rate</dt><dd id="byte-rate">0 B/s</dd></div>
           </dl>
-        </section>
-
-        <section class="frame-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="eyebrow">Raw inspection</p>
-              <h2>Last binary frame</h2>
-            </div>
+          <div class="raw-frame-heading">
+            <span>Last binary frame</span>
             <span class="hex-chip">HEX · 32 bytes</span>
           </div>
           <pre id="last-frame" aria-live="polite">No frame received yet.</pre>
-          <p class="field-help">Only the first 32 bytes are shown. The stream is never decoded or stored.</p>
-        </section>
-      </div>
+        </div>
+      </details>
     </main>
 
+    <dialog id="dashboard-settings" class="settings-dialog" aria-labelledby="settings-title">
+      <div class="settings-card">
+        <header class="settings-heading">
+          <div>
+            <p class="eyebrow">Display preferences</p>
+            <h2 id="settings-title">Customize dashboard</h2>
+            <p>Choose what is visible and how flight values are displayed. Settings stay in this browser.</p>
+          </div>
+          <button id="close-settings-button" class="icon-button close-button" type="button" aria-label="Close settings">×</button>
+        </header>
+
+        <div class="settings-body">
+          <section class="settings-section" aria-labelledby="widgets-settings-title">
+            <h3 id="widgets-settings-title">Widgets and order</h3>
+            <div id="widget-settings-list" class="widget-settings-list"></div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="units-settings-title">
+            <h3 id="units-settings-title">Units and layout</h3>
+            <div class="settings-grid">
+              <label>Airspeed unit
+                <select id="speed-unit">
+                  <option value="mps">m/s</option>
+                  <option value="kmh">km/h</option>
+                  <option value="kt">knots</option>
+                </select>
+              </label>
+              <label>Altitude unit
+                <select id="altitude-unit">
+                  <option value="m">metres</option>
+                  <option value="ft">feet</option>
+                </select>
+              </label>
+              <label>Dashboard layout
+                <select id="dashboard-layout">
+                  <option value="balanced">Balanced</option>
+                  <option value="equal">Equal cards</option>
+                  <option value="single">Single column</option>
+                </select>
+              </label>
+              <label>Accent colour
+                <input id="dashboard-accent" type="color" value="#b86238">
+              </label>
+            </div>
+          </section>
+
+          <section class="settings-section" aria-labelledby="scales-settings-title">
+            <h3 id="scales-settings-title">Visual scales</h3>
+            <div class="settings-grid three-settings">
+              <label>Trail points
+                <input id="trail-points" type="number" min="10" max="250" step="10">
+              </label>
+              <label>Airspeed max (m/s)
+                <input id="airspeed-scale" type="number" min="5" max="200" step="5">
+              </label>
+              <label>AGL max (m)
+                <input id="altitude-scale" type="number" min="10" max="5000" step="10">
+              </label>
+            </div>
+          </section>
+        </div>
+
+        <footer class="settings-footer">
+          <button id="reset-dashboard-button" class="secondary" type="button">Reset defaults</button>
+          <button id="done-settings-button" type="button">Done</button>
+        </footer>
+      </div>
+    </dialog>
+
     <footer class="site-footer compact-footer">
-      <span>Mole → MavMole relay → Digger</span>
-      <span>Raw binary transport</span>
+      <span>Mole → MavMole relay → Molehill</span>
+      <span>Decoded locally · Nothing stored</span>
     </footer>
     <script src="/js/logger.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/mavlink-telemetry.js"></script>
+    <script src="/js/telemetry-dashboard.js"></script>
     <script src="/js/digger.js"></script>
   </body>
 </html>

@@ -8,6 +8,9 @@
   const relayStatus = document.querySelector("#relay-status");
   const receivingStatus = document.querySelector("#receiving-status");
   const lastFrame = document.querySelector("#last-frame");
+  const parser = new window.MavMoleTelemetry.MavlinkStreamParser();
+  const decoder = new window.MavMoleTelemetry.TelemetryDecoder();
+  const dashboard = window.MavMoleDashboard.create();
   let relaySocket = null;
 
   const stats = new ui.StreamStats({
@@ -46,6 +49,9 @@
   async function connect() {
     disconnect(false);
     stats.reset();
+    parser.reset();
+    decoder.reset();
+    dashboard.reset();
     lastFrame.textContent = "No frame received yet.";
     const relayUrl = ui.relayWebSocketUrl("digger");
     const socket = new WebSocket(relayUrl);
@@ -68,11 +74,23 @@
 
       const byteLength = event.data.byteLength ?? event.data.size ?? 0;
       stats.record(byteLength);
-      ui.setStatus(receivingStatus, "Receiving binary frames", "connected");
       lastFrame.textContent = describeFrame(event.data);
+
+      const messages = parser.push(event.data);
+      if (messages.length > 0) {
+        for (const message of messages) {
+          const changed = decoder.ingest(message);
+          dashboard.update(decoder.state, changed);
+        }
+        ui.setStatus(receivingStatus, "Receiving MAVLink telemetry", "connected");
+      } else {
+        ui.setStatus(receivingStatus, "Receiving binary stream", "connected");
+      }
+
       log.debug("Received a binary frame from MavMole.", {
         bytes: byteLength,
         frame: stats.frames,
+        mavlinkMessages: messages.length,
       });
     });
 
@@ -118,5 +136,6 @@
   connectButton.addEventListener("click", connect);
   disconnectButton.addEventListener("click", () => disconnect(true));
   window.addEventListener("beforeunload", () => disconnect(false));
+  dashboard.reset();
   log.info("Digger page ready.");
 })();

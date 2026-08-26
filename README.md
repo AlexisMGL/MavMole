@@ -1,6 +1,6 @@
 # MavMole V1
 
-Prototype minimal pour relayer un flux MAVLink binaire depuis Mission Planner vers un second navigateur, sans parser ni modifier les paquets.
+Prototype pour relayer un flux MAVLink binaire depuis Mission Planner vers un second navigateur et l'afficher dans un dashboard de télémétrie personnalisable.
 
 ## Ce que fait cette V1
 
@@ -23,7 +23,10 @@ Navigateur Digger
 - aucune base de données, aucun compte et aucun stockage ;
 - compteurs de trames, volume et débit dans les pages ;
 - logs détaillés dans la console du navigateur (F12 → Console) et sur le serveur ;
-- le dernier paquet reçu est affiché en hexadécimal côté Digger, sans décodage MAVLink.
+- le Digger décode localement la position, l'airspeed, l'altitude AGL et la batterie sans modifier le flux relayé ;
+- le courant batterie est affiché en valeur absolue, même lorsque l'autopilote utilise une convention négative ;
+- l'ordre, la visibilité, les unités, la couleur et les échelles des widgets sont personnalisables et conservés dans le navigateur ;
+- les compteurs de transport et le dernier paquet brut restent disponibles dans les diagnostics.
 
 ## Identité visuelle
 
@@ -70,7 +73,7 @@ Dans un second terminal :
 npm run fake-source
 ```
 
-Entrer `ws://127.0.0.1:5863` sur la page Mole. Cette source envoie dix fausses trames binaires par seconde. Elles ne sont pas des paquets MAVLink valides : elles servent uniquement à vérifier le transport de bout en bout.
+Entrer `ws://127.0.0.1:5863` sur la page Mole. Cette source envoie une télémétrie MAVLink synthétique valide avec une position en mouvement, l'airspeed, l'AGL et une batterie dont le courant est volontairement négatif. Elle permet de vérifier le relais et le dashboard de bout en bout.
 
 ## Tester avec Mission Planner et SITL
 
