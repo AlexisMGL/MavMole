@@ -4,11 +4,24 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
   CRC_EXTRA,
+  DIALECT,
   MESSAGE,
   MavlinkStreamParser,
   TelemetryDecoder,
+  decodeMavlinkFields,
+  formatTokens,
   x25Crc,
 } = require("../public/js/mavlink-telemetry");
+
+test("loads the generated MAVLink dialect with consistent field metadata", () => {
+  assert.ok(DIALECT.definitions.length >= 300);
+  for (const definition of DIALECT.definitions) {
+    const [_id, _name, format, orderMap, _crc, fieldNames] = definition;
+    const tokens = formatTokens(format);
+    assert.equal(fieldNames.length, orderMap.length);
+    assert.ok(orderMap.every((index) => index >= 0 && index < tokens.length));
+  }
+});
 
 function mavlinkFrame(version, messageId, payload, sequence = 0) {
   const header = Buffer.alloc(version === 2 ? 10 : 6);
@@ -141,4 +154,25 @@ test("decodes the primary BATTERY_STATUS pack voltage and absolute current", () 
   assert.equal(decoder.state.batteryVoltage.value, 23.8);
   assert.equal(decoder.state.batteryCurrent.value, 12.34);
   assert.equal(decoder.state.batteryRemaining.value, 54);
+});
+
+test("decodes arbitrary numeric fields and arrays from generated definitions", () => {
+  const attitudePayload = Buffer.alloc(28);
+  attitudePayload.writeUInt32LE(1234, 0);
+  attitudePayload.writeFloatLE(0.25, 4);
+  attitudePayload.writeFloatLE(-0.5, 8);
+  const attitude = decodeMavlinkFields(packet(30, attitudePayload));
+
+  assert.equal(attitude.messageName, "ATTITUDE");
+  assert.equal(attitude.fields.time_boot_ms, 1234);
+  assert.equal(attitude.fields.roll, 0.25);
+  assert.equal(attitude.fields.pitch, -0.5);
+
+  const batteryPayload = Buffer.alloc(54);
+  batteryPayload.writeUInt16LE(4200, 10);
+  batteryPayload.writeUInt16LE(4150, 12);
+  const battery = decodeMavlinkFields(packet(MESSAGE.BATTERY_STATUS, batteryPayload));
+  assert.equal(battery.fields.voltages[0], 4200);
+  assert.equal(battery.fields.voltages[1], 4150);
+  assert.equal(battery.fields.voltages.length, 10);
 });

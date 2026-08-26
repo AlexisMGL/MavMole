@@ -17,7 +17,7 @@ MavMole sur Render
 Navigateur Digger
 ```
 
-- un seul Mole et un seul Digger à la fois ;
+- un seul Mole et plusieurs viewers Digger simultanés ;
 - relais uniquement dans le sens Mole → Digger ;
 - trames WebSocket binaires retransmises byte-for-byte ;
 - aucune base de données, aucun compte et aucun stockage ;
@@ -26,6 +26,10 @@ Navigateur Digger
 - le Digger décode localement la position, l'airspeed, l'altitude AGL et la batterie sans modifier le flux relayé ;
 - le courant batterie est affiché en valeur absolue, même lorsque l'autopilote utilise une convention négative ;
 - l'ordre, la visibilité, les unités, la couleur et les échelles des widgets sont personnalisables et conservés dans le navigateur ;
+- des widgets Valeur, courbe temporelle et jauge peuvent être créés depuis n'importe quel champ numérique des 338 messages du dialecte MAVLink embarqué ;
+- la configuration complète du dashboard peut être exportée et importée en JSON ;
+- les pages Mole et Digger affichent en temps réel le nombre de viewers connectés au stream ;
+- la carte utilise Google Satellite lorsque `GOOGLE_MAPS_API_KEY` est configuré, avec la trace locale comme fallback ;
 - les compteurs de transport et le dernier paquet brut restent disponibles dans les diagnostics.
 
 ## Identité visuelle
@@ -46,7 +50,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\capture-ui.ps1
 
 Le détail des fichiers et dimensions est dans `assets/README.md`.
 
-Quand un second client prend le même rôle, il remplace le premier. L’ancienne connexion reçoit le code de fermeture `4001`.
+Quand un second Mole se connecte, il remplace la source précédente et l’ancienne connexion reçoit le code de fermeture `4001`. Les connexions Digger sont cumulées et reçoivent toutes le même flux.
 
 ## Lancer en local
 
@@ -64,6 +68,21 @@ Ouvrir ensuite :
 - `http://localhost:3000/mole` sur le PC de Mission Planner et cliquer sur **Connect and forward**.
 
 L’état technique du service est disponible sur `http://localhost:3000/healthz`.
+
+Pour activer le fond Google Satellite, fournir une clé autorisée pour la Maps JavaScript API :
+
+```powershell
+$env:GOOGLE_MAPS_API_KEY="your-restricted-browser-key"
+npm start
+```
+
+Sur Render, renseigner `GOOGLE_MAPS_API_KEY` dans les variables d'environnement. Restreindre la clé à la Maps JavaScript API et aux référents HTTP du site.
+
+Le catalogue compact de champs MAVLink est généré depuis le fichier mavgen utilisé par TelemetryDashboard. Pour le reconstruire :
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\build-mavlink-dialect.ps1 -SourcePath <chemin-vers-mavlink.js>
+```
 
 ### Tester sans Mission Planner
 
@@ -131,4 +150,4 @@ Les services Free s’endorment après 15 minutes sans trafic HTTP entrant ni me
 
 Cette V1 est volontairement publique et sans authentification : toute personne connaissant l’URL peut prendre le rôle Mole ou Digger. Ne pas l’utiliser avec une télémétrie sensible ou pour commander un véhicule réel.
 
-Avant une utilisation réelle, il faudra au minimum ajouter des Molehill IDs aléatoires, une authentification, plusieurs viewers, des limites de débit et une politique d’origine. Le déploiement doit rester sur une seule instance tant que les sessions sont stockées en mémoire.
+Avant une utilisation réelle, il faudra au minimum ajouter des Molehill IDs aléatoires, une authentification, des limites de débit et une politique d’origine. Le déploiement doit rester sur une seule instance tant que les sessions sont stockées en mémoire.

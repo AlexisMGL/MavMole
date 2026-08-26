@@ -23,6 +23,24 @@
     element.dataset.state = state;
   }
 
+  function parseRelayControl(data) {
+    if (typeof data !== "string") {
+      return null;
+    }
+
+    try {
+      const message = JSON.parse(data);
+      return message?.type === "stream.presence" ? message : null;
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  function renderViewerCount(element, count) {
+    const viewers = Math.max(0, Number.parseInt(count, 10) || 0);
+    element.textContent = `${viewers} viewer${viewers === 1 ? "" : "s"}`;
+  }
+
   function waitForOpen(socket, label) {
     return new Promise((resolve, reject) => {
       const onOpen = () => {
@@ -107,6 +125,8 @@
     formatBytes,
     relayWebSocketUrl,
     setStatus,
+    parseRelayControl,
+    renderViewerCount,
     waitForOpen,
     StreamStats,
   };

@@ -10,6 +10,7 @@
   const localStatus = document.querySelector("#local-status");
   const relayStatus = document.querySelector("#relay-status");
   const forwardingStatus = document.querySelector("#forwarding-status");
+  const viewerCount = document.querySelector("#viewer-count");
   let localSocket = null;
   let relaySocket = null;
   let attempt = 0;
@@ -52,6 +53,7 @@
       ui.setStatus(localStatus, "Disconnected", "idle");
       ui.setStatus(relayStatus, "Disconnected", "idle");
       ui.setStatus(forwardingStatus, "Stopped", "idle");
+      ui.renderViewerCount(viewerCount, 0);
     }
   }
 
@@ -63,6 +65,7 @@
     relaySocket = null;
     ui.setStatus(relayStatus, `Closed (code ${event.code})`, "error");
     ui.setStatus(forwardingStatus, "Stopped: relay closed", "error");
+    ui.renderViewerCount(viewerCount, 0);
     log.warn("Relay connection closed.", { code: event.code, reason: event.reason });
 
     const oldLocal = localSocket;
@@ -121,6 +124,12 @@
         ui.setStatus(relayStatus, "Connection error", "error");
       }
       log.error("Relay WebSocket error.", event);
+    });
+    newRelaySocket.addEventListener("message", (event) => {
+      const control = ui.parseRelayControl(event.data);
+      if (control) {
+        ui.renderViewerCount(viewerCount, control.viewers);
+      }
     });
     newRelaySocket.addEventListener("close", (event) => handleRelayClose(newRelaySocket, event));
 

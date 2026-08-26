@@ -13,10 +13,10 @@ const silentLogger = {
   error() {},
 };
 
-function createRelay(digger) {
+function createRelay(...diggers) {
   const connections = {
-    get(role) {
-      return role === ROLE.DIGGER ? digger : null;
+    all(role) {
+      return role === ROLE.DIGGER ? diggers.filter(Boolean) : [];
     },
   };
   return new BinaryRelay(connections, silentLogger);
@@ -63,8 +63,25 @@ test("ignores text frames and messages sent by a Digger", () => {
   });
 });
 
+test("forwards each Mole frame to every connected viewer", () => {
+  const sends = [0, 0];
+  const diggers = sends.map((_value, index) => ({
+    readyState: WebSocket.OPEN,
+    send(_data, _options, callback) {
+      sends[index] += 1;
+      callback();
+    },
+  }));
+  const relay = createRelay(...diggers);
+  const frame = Buffer.from([0xfd, 1, 2]);
+
+  assert.equal(relay.forward(ROLE.MOLE, frame, true), true);
+  assert.deepEqual(sends, [1, 1]);
+  assert.equal(relay.snapshot().bytesForwarded, frame.length * 2);
+});
+
 test("drops a Mole frame when no Digger is connected", () => {
-  const relay = createRelay(null);
+  const relay = createRelay();
 
   assert.equal(relay.forward(ROLE.MOLE, Buffer.from([1, 2, 3]), true), false);
   assert.equal(relay.snapshot().framesDropped, 1);

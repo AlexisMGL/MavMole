@@ -15,7 +15,32 @@ function openWebSocket(url) {
 
 function nextBinaryMessage(socket) {
   return new Promise((resolve, reject) => {
-    socket.once("message", (data, isBinary) => resolve({ data, isBinary }));
+    const onMessage = (data, isBinary) => {
+      if (!isBinary) {
+        return;
+      }
+      socket.off("message", onMessage);
+      resolve({ data, isBinary });
+    };
+    socket.on("message", onMessage);
+    socket.once("error", reject);
+  });
+}
+
+function nextPresenceMessage(socket, expectedViewers) {
+  return new Promise((resolve, reject) => {
+    const onMessage = (data, isBinary) => {
+      if (isBinary) {
+        return;
+      }
+      const message = JSON.parse(data.toString());
+      if (message.type !== "stream.presence" || message.viewers !== expectedViewers) {
+        return;
+      }
+      socket.off("message", onMessage);
+      resolve(message);
+    };
+    socket.on("message", onMessage);
     socket.once("error", reject);
   });
 }
@@ -41,6 +66,14 @@ test("serves the app and relays a binary frame end to end", async (context) => {
   assert.equal(assetResponse.status, 200);
   assert.match(assetResponse.headers.get("content-type"), /^image\/png/);
 
+  const dialectResponse = await fetch(`${httpUrl}/js/mavlink-dialect.js`);
+  assert.equal(dialectResponse.status, 200);
+  assert.match(dialectResponse.headers.get("content-type"), /javascript/);
+
+  const configResponse = await fetch(`${httpUrl}/api/config`);
+  assert.equal(configResponse.status, 200);
+  assert.ok(Object.hasOwn(await configResponse.json(), "googleMapsApiKey"));
+
   const digger = await openWebSocket(`${wsUrl}/ws?role=digger`);
   const mole = await openWebSocket(`${wsUrl}/ws?role=mole`);
   context.after(() => {
@@ -55,4 +88,31 @@ test("serves the app and relays a binary frame end to end", async (context) => {
   const message = await received;
   assert.equal(message.isBinary, true);
   assert.deepEqual(message.data, expectedFrame);
+});
+
+test("relays to multiple viewers and broadcasts the viewer count", async (context) => {
+  const service = createMavMoleServer();
+  await new Promise((resolve) => service.httpServer.listen(0, "127.0.0.1", resolve));
+  context.after(() => closeService(service));
+
+  const address = service.httpServer.address();
+  const wsUrl = `ws://127.0.0.1:${address.port}`;
+  const mole = await openWebSocket(`${wsUrl}/ws?role=mole`);
+  const firstViewer = await openWebSocket(`${wsUrl}/ws?role=digger`);
+  const presence = nextPresenceMessage(firstViewer, 2);
+  const secondViewer = await openWebSocket(`${wsUrl}/ws?role=digger`);
+  context.after(() => {
+    mole.close();
+    firstViewer.close();
+    secondViewer.close();
+  });
+
+  assert.equal((await presence).viewers, 2);
+  const firstFrame = nextBinaryMessage(firstViewer);
+  const secondFrame = nextBinaryMessage(secondViewer);
+  const expectedFrame = Buffer.from([0xfd, 0x02, 0x03]);
+  mole.send(expectedFrame, { binary: true });
+
+  assert.deepEqual((await firstFrame).data, expectedFrame);
+  assert.deepEqual((await secondFrame).data, expectedFrame);
 });

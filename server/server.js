@@ -3,10 +3,10 @@
 const http = require("node:http");
 const path = require("node:path");
 const express = require("express");
-const { WebSocketServer } = require("ws");
+const { WebSocket, WebSocketServer } = require("ws");
 const { ConnectionRegistry } = require("./websocket/connections");
 const { BinaryRelay } = require("./websocket/relay");
-const { VALID_ROLES } = require("./websocket/constants");
+const { ROLE, VALID_ROLES } = require("./websocket/constants");
 const { createLogger } = require("./utils/logger");
 
 const serverLogger = createLogger("Server");
@@ -46,6 +46,13 @@ function createMavMoleServer() {
       uptimeSeconds: Math.floor(process.uptime()),
       connections: connections.snapshot(),
       relay: relay.snapshot(),
+    });
+  });
+
+  app.get("/api/config", (_request, response) => {
+    response.set("Cache-Control", "no-store");
+    response.json({
+      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || null,
     });
   });
 
@@ -94,6 +101,22 @@ function createMavMoleServer() {
     connections.register(role, socket);
     websocketLogger.info(`Accepted ${role} from ${request.socket.remoteAddress}.`);
 
+    const broadcastPresence = () => {
+      const message = JSON.stringify({
+        type: "stream.presence",
+        viewers: connections.count(ROLE.DIGGER),
+        sourceConnected: connections.count(ROLE.MOLE) > 0,
+      });
+
+      for (const client of websocketServer.clients) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
+        }
+      }
+    };
+
+    broadcastPresence();
+
     socket.on("pong", () => {
       socket.isAlive = true;
     });
@@ -107,7 +130,10 @@ function createMavMoleServer() {
     });
 
     socket.on("close", (code, reason) => {
-      connections.remove(role, socket);
+      const removed = connections.remove(role, socket);
+      if (removed) {
+        broadcastPresence();
+      }
       websocketLogger.info(`${role} socket closed.`, {
         code,
         reason: reason.toString(),

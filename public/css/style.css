@@ -887,6 +887,12 @@ pre {
   background: var(--danger);
 }
 
+.viewer-count {
+  color: var(--ink);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
 .toolbar-actions button {
   min-height: 39px;
   padding-block: 8px;
@@ -1066,9 +1072,22 @@ pre {
   box-shadow: inset 0 0 60px rgba(43, 56, 45, 0.07);
 }
 
-.position-map svg {
+.position-map > .local-map-overlay {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
+  transition: opacity 180ms ease;
+}
+
+.satellite-map {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+}
+
+.position-map[data-map-state="satellite"] .local-map-overlay {
+  opacity: 0;
 }
 
 .map-grid-fill {
@@ -1352,6 +1371,131 @@ pre {
   transition: width 220ms ease;
 }
 
+.custom-chart-widget {
+  grid-column: 1 / -1;
+  min-height: 270px;
+}
+
+.custom-value-widget,
+.custom-gauge-widget {
+  min-height: 230px;
+}
+
+.custom-widget-heading {
+  margin-bottom: 12px;
+}
+
+.custom-widget-content {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 105px;
+}
+
+.custom-value-readout,
+.chart-current {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 8px;
+}
+
+.custom-value-readout strong {
+  color: var(--ink);
+  font-size: clamp(2.2rem, 4vw, 3.7rem);
+  font-weight: 820;
+  letter-spacing: -0.06em;
+}
+
+.custom-value-readout span,
+.chart-current span {
+  color: var(--dashboard-accent);
+  font-size: 0.8rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.custom-gauge {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+
+.custom-gauge svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(130deg);
+}
+
+.custom-gauge .gauge-readout {
+  inset: 0;
+}
+
+.custom-gauge .gauge-readout strong {
+  font-size: 1.8rem;
+}
+
+.custom-range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  color: var(--ink-soft);
+  font-size: 0.65rem;
+  font-weight: 690;
+}
+
+.custom-gauge-widget .custom-widget-content {
+  flex-direction: column;
+}
+
+.custom-chart-widget .custom-widget-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 24px;
+  width: 100%;
+}
+
+.chart-current {
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: flex-end;
+}
+
+.chart-current strong {
+  font-size: 1.7rem;
+  letter-spacing: -0.04em;
+}
+
+.time-chart {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 130px;
+  overflow: visible;
+}
+
+.chart-grid {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--dashboard-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.custom-chart-widget .custom-range {
+  grid-column: 1 / -1;
+}
+
 .raw-diagnostics {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -1418,7 +1562,7 @@ pre {
 }
 
 .settings-dialog {
-  width: min(calc(100% - 28px), 760px);
+  width: min(calc(100% - 28px), 860px);
   max-width: none;
   max-height: min(88vh, 850px);
   padding: 0;
@@ -1493,6 +1637,13 @@ button.close-button {
   letter-spacing: -0.02em;
 }
 
+.settings-section-heading p,
+.profile-settings p {
+  margin: -9px 0 16px;
+  color: var(--ink-soft);
+  font-size: 0.76rem;
+}
+
 .widget-settings-list {
   display: grid;
   gap: 8px;
@@ -1542,6 +1693,117 @@ button.close-button {
 
 .settings-grid label {
   margin: 0;
+}
+
+.settings-grid .wide-setting {
+  grid-column: 1 / -1;
+}
+
+.custom-widget-builder {
+  padding: 17px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--canvas);
+}
+
+.custom-widget-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.custom-widget-form [data-custom-option][hidden] {
+  display: none !important;
+}
+
+.checkbox-setting > span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  margin-top: 7px;
+  padding-inline: 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  background: var(--surface);
+  font-size: 0.8rem;
+}
+
+.settings-grid .checkbox-setting input {
+  width: 17px;
+  min-height: 17px;
+  margin: 0;
+  accent-color: var(--dashboard-accent);
+}
+
+.custom-builder-action,
+.profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-top: 15px;
+}
+
+.settings-status {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+}
+
+.custom-widget-settings-list {
+  margin-top: 12px;
+}
+
+.custom-setting-label {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.custom-setting-label strong,
+.custom-setting-label small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.custom-setting-label strong {
+  font-size: 0.78rem;
+}
+
+.custom-setting-label small,
+.settings-empty {
+  color: var(--ink-soft);
+  font-size: 0.67rem;
+}
+
+.settings-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  text-align: center;
+}
+
+.profile-settings {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 20px;
+  align-items: center;
+}
+
+.profile-settings h3,
+.profile-settings p {
+  margin-bottom: 4px;
+}
+
+.profile-actions {
+  grid-column: 2;
+  grid-row: 1;
+  margin: 0;
+}
+
+.profile-settings .settings-status {
+  grid-column: 1 / -1;
 }
 
 .settings-grid select,
@@ -1705,6 +1967,10 @@ button.close-button {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .custom-widget-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .mode-badge {
     display: none;
   }
@@ -1848,6 +2114,27 @@ button.close-button {
 
   .settings-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .custom-widget-form,
+  .profile-settings {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-grid .wide-setting,
+  .profile-actions,
+  .profile-settings .settings-status {
+    grid-column: 1;
+  }
+
+  .profile-actions {
+    grid-row: auto;
+    flex-wrap: wrap;
+  }
+
+  .custom-builder-action {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .settings-footer {

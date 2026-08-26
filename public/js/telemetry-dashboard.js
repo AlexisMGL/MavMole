@@ -2,6 +2,11 @@
   "use strict";
 
   const STORAGE_KEY = "mavmole.dashboard.v1";
+  const PROFILE_FORMAT = "mavmole-dashboard";
+  const PROFILE_VERSION = 2;
+  const CUSTOM_WIDGET_TYPES = new Set(["value", "chart", "gauge"]);
+  const MAX_CUSTOM_WIDGETS = 32;
+  const MAX_HISTORY_POINTS = 240;
   const WIDGETS = Object.freeze([
     { id: "position", label: "Position" },
     { id: "airspeed", label: "Airspeed" },
@@ -18,6 +23,7 @@
     trailPoints: 80,
     airspeedScaleMps: 50,
     altitudeScaleM: 150,
+    customWidgets: [],
   });
 
   function cloneDefaults() {
@@ -25,6 +31,82 @@
       ...DEFAULT_SETTINGS,
       order: [...DEFAULT_SETTINGS.order],
       visible: { ...DEFAULT_SETTINGS.visible },
+      customWidgets: [],
+    };
+  }
+
+  function safeText(value, fallback = "") {
+    return typeof value === "string" ? value.trim().slice(0, 80) : fallback;
+  }
+
+  function createWidgetId() {
+    if (global.crypto?.randomUUID) {
+      return global.crypto.randomUUID();
+    }
+    return `widget-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function sanitizeCustomWidget(value) {
+    if (!value || typeof value !== "object" || !CUSTOM_WIDGET_TYPES.has(value.type)) {
+      return null;
+    }
+    const fieldKey = safeText(value.fieldKey);
+    if (!/^\d+\.[A-Za-z0-9_]+(?:\[\d+\])?$/.test(fieldKey)) {
+      return null;
+    }
+
+    const minimum = Number(value.min);
+    const maximum = Number(value.max);
+    const requestedId = safeText(value.id);
+    return {
+      id: /^[A-Za-z0-9-]{1,80}$/.test(requestedId) ? requestedId : createWidgetId(),
+      type: value.type,
+      fieldKey,
+      messageName: safeText(value.messageName, "MAVLink"),
+      fieldLabel: safeText(value.fieldLabel, fieldKey.split(".").slice(1).join(".")),
+      label: safeText(value.label),
+      unit: safeText(value.unit),
+      decimals: Math.round(clamp(Number(value.decimals) || 0, 0, 6)),
+      absolute: Boolean(value.absolute),
+      min: Number.isFinite(minimum) ? minimum : 0,
+      max: Number.isFinite(maximum) && maximum > minimum ? maximum : 100,
+      windowSeconds: clamp(Number(value.windowSeconds) || 60, 5, 600),
+    };
+  }
+
+  function normalizeSettings(saved) {
+    if (!saved || typeof saved !== "object") {
+      return cloneDefaults();
+    }
+
+    const knownIds = new Set(WIDGETS.map((widget) => widget.id));
+    const savedOrder = Array.isArray(saved.order) ? saved.order.filter((id) => knownIds.has(id)) : [];
+    const missingIds = DEFAULT_SETTINGS.order.filter((id) => !savedOrder.includes(id));
+    const customWidgets = Array.isArray(saved.customWidgets)
+      ? saved.customWidgets.map(sanitizeCustomWidget).filter(Boolean).slice(0, MAX_CUSTOM_WIDGETS)
+      : [];
+    const customIds = new Set();
+    for (const widget of customWidgets) {
+      if (customIds.has(widget.id)) {
+        widget.id = createWidgetId();
+      }
+      customIds.add(widget.id);
+    }
+    const visible = Object.fromEntries(
+      WIDGETS.map((widget) => [widget.id, saved.visible?.[widget.id] !== false]),
+    );
+    return {
+      ...cloneDefaults(),
+      order: [...savedOrder, ...missingIds],
+      visible,
+      speedUnit: ["mps", "kmh", "kt"].includes(saved.speedUnit) ? saved.speedUnit : DEFAULT_SETTINGS.speedUnit,
+      altitudeUnit: ["m", "ft"].includes(saved.altitudeUnit) ? saved.altitudeUnit : DEFAULT_SETTINGS.altitudeUnit,
+      layout: ["balanced", "equal", "single"].includes(saved.layout) ? saved.layout : DEFAULT_SETTINGS.layout,
+      accent: /^#[0-9a-f]{6}$/i.test(saved.accent) ? saved.accent : DEFAULT_SETTINGS.accent,
+      trailPoints: clamp(Number(saved.trailPoints) || DEFAULT_SETTINGS.trailPoints, 10, 250),
+      airspeedScaleMps: clamp(Number(saved.airspeedScaleMps) || DEFAULT_SETTINGS.airspeedScaleMps, 5, 200),
+      altitudeScaleM: clamp(Number(saved.altitudeScaleM) || DEFAULT_SETTINGS.altitudeScaleM, 10, 5000),
+      customWidgets,
     };
   }
 
@@ -35,15 +117,7 @@
         return cloneDefaults();
       }
 
-      const knownIds = new Set(WIDGETS.map((widget) => widget.id));
-      const savedOrder = Array.isArray(saved.order) ? saved.order.filter((id) => knownIds.has(id)) : [];
-      const missingIds = DEFAULT_SETTINGS.order.filter((id) => !savedOrder.includes(id));
-      return {
-        ...cloneDefaults(),
-        ...saved,
-        order: [...savedOrder, ...missingIds],
-        visible: { ...DEFAULT_SETTINGS.visible, ...(saved.visible || {}) },
-      };
+      return normalizeSettings(saved);
     } catch (_error) {
       return cloneDefaults();
     }
@@ -97,6 +171,128 @@
     return { value: meters.toFixed(1), unit: "m" };
   }
 
+  let googleMapsPromise = null;
+
+  async function loadGoogleMaps() {
+    if (global.google?.maps?.Map) {
+      return global.google.maps;
+    }
+    if (googleMapsPromise) {
+      return googleMapsPromise;
+    }
+
+    googleMapsPromise = fetch("/api/config", { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Map configuration returned ${response.status}.`);
+        }
+        return response.json();
+      })
+      .then((config) => {
+        if (!config.googleMapsApiKey) {
+          throw new Error("GOOGLE_MAPS_API_KEY is not configured.");
+        }
+        return new Promise((resolve, reject) => {
+          const callbackName = `__mavMoleGoogleMapsReady${Date.now()}`;
+          global[callbackName] = () => {
+            delete global[callbackName];
+            resolve(global.google.maps);
+          };
+          const script = document.createElement("script");
+          const query = new URLSearchParams({
+            key: config.googleMapsApiKey,
+            callback: callbackName,
+            loading: "async",
+            v: "weekly",
+            auth_referrer_policy: "origin",
+          });
+          script.src = `https://maps.googleapis.com/maps/api/js?${query}`;
+          script.async = true;
+          script.onerror = () => {
+            delete global[callbackName];
+            reject(new Error("Google Maps JavaScript API failed to load."));
+          };
+          document.head.appendChild(script);
+        });
+      });
+    return googleMapsPromise;
+  }
+
+  class SatelliteMap {
+    constructor(container, statusElement) {
+      this.container = container;
+      this.statusElement = statusElement;
+      this.map = null;
+      this.marker = null;
+      this.polyline = null;
+      this.pendingTrail = [];
+      this.initialize();
+    }
+
+    async initialize() {
+      try {
+        const maps = await loadGoogleMaps();
+        this.map = new maps.Map(this.container, {
+          center: { lat: 0, lng: 0 },
+          zoom: 18,
+          mapTypeId: "satellite",
+          disableDefaultUI: true,
+          clickableIcons: false,
+          keyboardShortcuts: false,
+          gestureHandling: "cooperative",
+        });
+        this.polyline = new maps.Polyline({
+          map: this.map,
+          strokeColor: "#f07a3c",
+          strokeOpacity: 0.95,
+          strokeWeight: 3,
+        });
+        this.marker = new maps.Marker({
+          map: this.map,
+          title: "Aircraft",
+          zIndex: 4,
+        });
+        this.container.parentElement.dataset.mapState = "satellite";
+        this.statusElement.textContent = "Google Satellite";
+        this.update(this.pendingTrail);
+      } catch (error) {
+        this.container.parentElement.dataset.mapState = "fallback";
+        this.statusElement.textContent = "Local trail";
+        this.statusElement.title = error.message;
+      }
+    }
+
+    reset() {
+      this.pendingTrail = [];
+      this.polyline?.setPath([]);
+      this.marker?.setMap(null);
+    }
+
+    update(trail) {
+      this.pendingTrail = trail;
+      if (!this.map || trail.length === 0) {
+        return;
+      }
+
+      const path = trail.map((point) => ({ lat: point.lat, lng: point.lon }));
+      const last = trail.at(-1);
+      const position = path.at(-1);
+      this.polyline.setPath(path);
+      this.marker.setMap(this.map);
+      this.marker.setPosition(position);
+      this.marker.setIcon({
+        path: global.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+        fillColor: "#f07a3c",
+        fillOpacity: 1,
+        strokeColor: "#ffffff",
+        strokeWeight: 2,
+        rotation: Number.isFinite(last.heading) ? last.heading : 0,
+        scale: 6,
+      });
+      this.map.setCenter(position);
+    }
+  }
+
   class Dashboard {
     constructor() {
       this.root = document.querySelector("#telemetry-grid");
@@ -105,9 +301,14 @@
       this.state = null;
       this.trail = [];
       this.lastTrailTimestamp = 0;
+      this.fieldRegistry = new Map();
+      this.observedMessages = new Map();
+      this.customHistory = new Map();
 
       this.elements = {
         freshness: document.querySelector("#telemetry-freshness"),
+        satelliteMap: document.querySelector("#satellite-map"),
+        mapProviderStatus: document.querySelector("#map-provider-status"),
         positionEmpty: document.querySelector("#position-empty"),
         positionTrail: document.querySelector("#position-trail"),
         vehicleMarker: document.querySelector("#vehicle-marker"),
@@ -131,6 +332,8 @@
         batterySource: document.querySelector("#battery-source"),
       };
 
+      this.satelliteMap = new SatelliteMap(this.elements.satelliteMap, this.elements.mapProviderStatus);
+
       this.bindSettings();
       this.applySettings();
       this.freshnessTimer = global.setInterval(() => this.renderFreshness(), 1000);
@@ -140,6 +343,10 @@
       this.state = null;
       this.trail = [];
       this.lastTrailTimestamp = 0;
+      this.fieldRegistry.clear();
+      this.observedMessages.clear();
+      this.customHistory.clear();
+      this.satelliteMap.reset();
       this.elements.positionTrail.setAttribute("points", "");
       this.elements.vehicleMarker.setAttribute("hidden", "");
       this.elements.positionEmpty.hidden = false;
@@ -151,6 +358,7 @@
       this.renderAirspeed(null);
       this.renderAgl(null);
       this.renderBattery(null);
+      this.renderAllCustomWidgets();
       this.renderFreshness();
     }
 
@@ -171,6 +379,74 @@
         this.renderBattery(state);
       }
       this.renderFreshness();
+    }
+
+    ingestMessage(packet, now = Date.now()) {
+      const decoded = packet.decoded;
+      if (!decoded) {
+        return;
+      }
+
+      let message = this.observedMessages.get(decoded.messageId);
+      let catalogChanged = false;
+      if (!message) {
+        message = {
+          id: decoded.messageId,
+          name: decoded.messageName,
+          fields: new Map(),
+        };
+        this.observedMessages.set(decoded.messageId, message);
+        catalogChanged = true;
+      }
+
+      const updatedKeys = new Set();
+      for (const [fieldName, rawValue] of Object.entries(decoded.fields)) {
+        const values = Array.isArray(rawValue) ? rawValue : [rawValue];
+        values.forEach((value, index) => {
+          if (!Number.isFinite(value)) {
+            return;
+          }
+          const suffix = Array.isArray(rawValue) ? `[${index}]` : "";
+          const fieldLabel = `${fieldName}${suffix}`;
+          const key = `${decoded.messageId}.${fieldLabel}`;
+          const metadata = {
+            key,
+            messageId: decoded.messageId,
+            messageName: decoded.messageName,
+            fieldName,
+            fieldLabel,
+            value,
+            updatedAt: now,
+          };
+          this.fieldRegistry.set(key, metadata);
+          updatedKeys.add(key);
+          if (!message.fields.has(key)) {
+            message.fields.set(key, metadata);
+            catalogChanged = true;
+          }
+        });
+      }
+
+      for (const widget of this.settings.customWidgets) {
+        if (!updatedKeys.has(widget.fieldKey)) {
+          continue;
+        }
+        const metadata = this.fieldRegistry.get(widget.fieldKey);
+        if (widget.type === "chart") {
+          const history = this.customHistory.get(widget.id) || [];
+          history.push({ time: now, value: widget.absolute ? Math.abs(metadata.value) : metadata.value });
+          const cutoff = now - widget.windowSeconds * 1000;
+          this.customHistory.set(
+            widget.id,
+            history.filter((point) => point.time >= cutoff).slice(-MAX_HISTORY_POINTS),
+          );
+        }
+        this.renderCustomWidget(widget);
+      }
+
+      if (catalogChanged && this.settingsDialog.open) {
+        this.syncFieldOptions();
+      }
     }
 
     renderFreshness() {
@@ -221,9 +497,10 @@
       this.elements.heading.textContent = Number.isFinite(position.heading)
         ? `${position.heading.toFixed(0)}°`
         : "—";
-      this.elements.mapLink.href = `https://www.openstreetmap.org/?mlat=${position.lat}&mlon=${position.lon}#map=16/${position.lat}/${position.lon}`;
+      this.elements.mapLink.href = `https://www.google.com/maps?q=${position.lat},${position.lon}&t=k`;
       this.elements.mapLink.removeAttribute("aria-disabled");
       this.renderTrail(position.heading);
+      this.satelliteMap.update(this.trail);
     }
 
     renderTrail(heading) {
@@ -301,9 +578,150 @@
         state?.batteryVoltage?.source || state?.batteryCurrent?.source || "No battery message";
     }
 
+    customWidgetTitle(widget) {
+      return widget.label || `${widget.messageName} · ${widget.fieldLabel}`;
+    }
+
+    createCustomWidget(widget) {
+      const article = document.createElement("article");
+      article.className = `telemetry-widget custom-telemetry-widget custom-${widget.type}-widget`;
+      article.dataset.customWidget = widget.id;
+      article.innerHTML = `
+        <header class="widget-heading custom-widget-heading">
+          <div>
+            <span class="widget-kicker" data-role="message"></span>
+            <h3 data-role="title"></h3>
+          </div>
+          <span class="widget-symbol" data-role="kind"></span>
+        </header>
+        <div class="custom-widget-content" data-role="content"></div>
+        <p class="widget-source" data-role="source">Waiting for field</p>`;
+      article.querySelector('[data-role="message"]').textContent = widget.messageName;
+      article.querySelector('[data-role="title"]').textContent = this.customWidgetTitle(widget);
+      article.querySelector('[data-role="kind"]').textContent =
+        widget.type === "chart" ? "TIME" : widget.type === "gauge" ? "GAUGE" : "VALUE";
+
+      const content = article.querySelector('[data-role="content"]');
+      if (widget.type === "value") {
+        content.innerHTML = `
+          <div class="custom-value-readout">
+            <strong data-role="value">—</strong>
+            <span data-role="unit"></span>
+          </div>`;
+      } else if (widget.type === "gauge") {
+        content.innerHTML = `
+          <div class="custom-gauge">
+            <svg viewBox="0 0 120 120" aria-hidden="true">
+              <circle class="gauge-track" cx="60" cy="60" r="48" pathLength="100"></circle>
+              <circle class="gauge-value" data-role="gauge-arc" cx="60" cy="60" r="48" pathLength="100"></circle>
+            </svg>
+            <div class="gauge-readout"><strong data-role="value">—</strong><span data-role="unit"></span></div>
+          </div>
+          <div class="custom-range"><span data-role="minimum"></span><span data-role="maximum"></span></div>`;
+      } else {
+        content.innerHTML = `
+          <div class="chart-current"><strong data-role="value">—</strong><span data-role="unit"></span></div>
+          <svg class="time-chart" viewBox="0 0 300 110" preserveAspectRatio="none" aria-label="Time based graph">
+            <path class="chart-grid" d="M12 12H288 M12 52H288 M12 92H288 M12 12V92 M104 12V92 M196 12V92 M288 12V92"></path>
+            <polyline class="chart-line" data-role="chart-line" points=""></polyline>
+          </svg>
+          <div class="custom-range"><span data-role="chart-min">—</span><span data-role="window"></span><span data-role="chart-max">—</span></div>`;
+      }
+      return article;
+    }
+
+    ensureCustomWidgets() {
+      this.root.querySelectorAll(".custom-telemetry-widget").forEach((element) => element.remove());
+      const activeIds = new Set(this.settings.customWidgets.map((widget) => widget.id));
+      for (const historyId of this.customHistory.keys()) {
+        if (!activeIds.has(historyId)) {
+          this.customHistory.delete(historyId);
+        }
+      }
+      for (const widget of this.settings.customWidgets) {
+        this.root.appendChild(this.createCustomWidget(widget));
+        this.renderCustomWidget(widget);
+      }
+    }
+
+    formatCustomValue(value, widget) {
+      if (!Number.isFinite(value)) {
+        return "—";
+      }
+      const normalized = widget.absolute ? Math.abs(value) : value;
+      return normalized.toLocaleString(undefined, {
+        minimumFractionDigits: widget.decimals,
+        maximumFractionDigits: widget.decimals,
+      });
+    }
+
+    renderCustomWidget(widget) {
+      const article = this.root.querySelector(`[data-custom-widget="${CSS.escape(widget.id)}"]`);
+      if (!article) {
+        return;
+      }
+      const metadata = this.fieldRegistry.get(widget.fieldKey);
+      const value = metadata?.value;
+      const displayValue = widget.absolute && Number.isFinite(value) ? Math.abs(value) : value;
+      article.querySelector('[data-role="value"]').textContent = this.formatCustomValue(value, widget);
+      article.querySelector('[data-role="unit"]').textContent = widget.unit;
+      article.querySelector('[data-role="source"]').textContent = metadata
+        ? `${widget.messageName}.${widget.fieldLabel}`
+        : `Waiting for ${widget.messageName}.${widget.fieldLabel}`;
+
+      if (widget.type === "gauge") {
+        const range = widget.max - widget.min;
+        const percentage = Number.isFinite(displayValue)
+          ? clamp(((displayValue - widget.min) / range) * 100, 0, 100)
+          : 0;
+        article.querySelector('[data-role="gauge-arc"]').style.strokeDashoffset = String(100 - percentage);
+        article.querySelector('[data-role="minimum"]').textContent = `${widget.min}${widget.unit ? ` ${widget.unit}` : ""}`;
+        article.querySelector('[data-role="maximum"]').textContent = `${widget.max}${widget.unit ? ` ${widget.unit}` : ""}`;
+      }
+
+      if (widget.type === "chart") {
+        const history = this.customHistory.get(widget.id) || [];
+        const line = article.querySelector('[data-role="chart-line"]');
+        const windowLabel = article.querySelector('[data-role="window"]');
+        windowLabel.textContent = `${widget.windowSeconds}s window`;
+        if (history.length === 0) {
+          line.setAttribute("points", "");
+          return;
+        }
+
+        const values = history.map((point) => point.value);
+        let minimum = Math.min(...values);
+        let maximum = Math.max(...values);
+        if (maximum === minimum) {
+          const padding = Math.max(Math.abs(maximum) * 0.05, 1);
+          minimum -= padding;
+          maximum += padding;
+        }
+        const firstTime = history[0].time;
+        const timeSpan = Math.max(history.at(-1).time - firstTime, 1);
+        const valueSpan = maximum - minimum;
+        const points = history.map((point) => {
+          const x = 12 + ((point.time - firstTime) / timeSpan) * 276;
+          const y = 92 - ((point.value - minimum) / valueSpan) * 80;
+          return `${x.toFixed(1)},${y.toFixed(1)}`;
+        });
+        line.setAttribute("points", points.join(" "));
+        article.querySelector('[data-role="chart-min"]').textContent = minimum.toFixed(widget.decimals);
+        article.querySelector('[data-role="chart-max"]').textContent = maximum.toFixed(widget.decimals);
+      }
+    }
+
+    renderAllCustomWidgets() {
+      for (const widget of this.settings.customWidgets) {
+        this.renderCustomWidget(widget);
+      }
+    }
+
     bindSettings() {
       document.querySelector("#customize-dashboard-button").addEventListener("click", () => {
         this.renderWidgetSettings();
+        this.renderCustomWidgetSettings();
+        this.syncFieldOptions();
         this.settingsDialog.showModal();
       });
       document.querySelector("#close-settings-button").addEventListener("click", () => this.settingsDialog.close());
@@ -312,6 +730,7 @@
         this.settings = cloneDefaults();
         this.syncSettingInputs();
         this.renderWidgetSettings();
+        this.renderCustomWidgetSettings();
         this.commitSettings();
       });
       this.settingsDialog.addEventListener("click", (event) => {
@@ -337,7 +756,34 @@
         });
       }
 
+      document.querySelector("#custom-widget-type").addEventListener("change", () => {
+        this.syncCustomFormVisibility();
+      });
+      document.querySelector("#add-custom-widget-button").addEventListener("click", () => {
+        this.addCustomWidget();
+      });
+      document.querySelector("#export-dashboard-button").addEventListener("click", () => {
+        this.exportDashboard();
+      });
+      document.querySelector("#import-dashboard-button").addEventListener("click", () => {
+        document.querySelector("#import-dashboard-file").click();
+      });
+      document.querySelector("#import-dashboard-file").addEventListener("change", async (event) => {
+        const [file] = event.target.files;
+        if (!file) {
+          return;
+        }
+        try {
+          await this.importDashboard(file);
+        } catch (error) {
+          document.querySelector("#profile-status").textContent = error.message;
+        } finally {
+          event.target.value = "";
+        }
+      });
+
       this.syncSettingInputs();
+      this.syncCustomFormVisibility();
     }
 
     syncSettingInputs() {
@@ -386,6 +832,177 @@
       });
     }
 
+    syncFieldOptions() {
+      const select = document.querySelector("#custom-field-select");
+      const previousValue = select.value;
+      select.replaceChildren();
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent =
+        this.observedMessages.size === 0 ? "Connect and receive MAVLink first" : "Select a MAVLink field";
+      select.appendChild(placeholder);
+
+      const messages = Array.from(this.observedMessages.values()).sort((first, second) =>
+        first.name.localeCompare(second.name),
+      );
+      for (const message of messages) {
+        const group = document.createElement("optgroup");
+        group.label = `${message.name} (#${message.id})`;
+        const fields = Array.from(message.fields.values()).sort((first, second) =>
+          first.fieldLabel.localeCompare(second.fieldLabel),
+        );
+        for (const field of fields) {
+          const option = document.createElement("option");
+          option.value = field.key;
+          option.textContent = field.fieldLabel;
+          group.appendChild(option);
+        }
+        select.appendChild(group);
+      }
+      if (this.fieldRegistry.has(previousValue)) {
+        select.value = previousValue;
+      }
+    }
+
+    syncCustomFormVisibility() {
+      const type = document.querySelector("#custom-widget-type").value;
+      document.querySelectorAll("[data-custom-option]").forEach((element) => {
+        const kinds = element.dataset.customOption.split(" ");
+        element.hidden = !kinds.includes(type);
+      });
+    }
+
+    addCustomWidget() {
+      const fieldKey = document.querySelector("#custom-field-select").value;
+      const metadata = this.fieldRegistry.get(fieldKey);
+      const status = document.querySelector("#custom-widget-status");
+      if (!metadata) {
+        status.textContent = "Select a field received from the MAVLink stream.";
+        return;
+      }
+      if (this.settings.customWidgets.length >= MAX_CUSTOM_WIDGETS) {
+        status.textContent = `The dashboard is limited to ${MAX_CUSTOM_WIDGETS} custom widgets.`;
+        return;
+      }
+
+      const widget = sanitizeCustomWidget({
+        id: createWidgetId(),
+        type: document.querySelector("#custom-widget-type").value,
+        fieldKey,
+        messageName: metadata.messageName,
+        fieldLabel: metadata.fieldLabel,
+        label: document.querySelector("#custom-widget-label").value,
+        unit: document.querySelector("#custom-widget-unit").value,
+        decimals: document.querySelector("#custom-widget-decimals").value,
+        absolute: document.querySelector("#custom-widget-absolute").checked,
+        min: document.querySelector("#custom-widget-min").value,
+        max: document.querySelector("#custom-widget-max").value,
+        windowSeconds: document.querySelector("#custom-widget-window").value,
+      });
+      if (!widget) {
+        status.textContent = "This widget configuration is invalid.";
+        return;
+      }
+
+      this.settings.customWidgets.push(widget);
+      this.commitSettings();
+      this.renderCustomWidgetSettings();
+      status.textContent = `${this.customWidgetTitle(widget)} added.`;
+      document.querySelector("#custom-widget-label").value = "";
+    }
+
+    renderCustomWidgetSettings() {
+      const list = document.querySelector("#custom-widget-settings-list");
+      list.replaceChildren();
+      if (this.settings.customWidgets.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "settings-empty";
+        empty.textContent = "No custom MAVLink widgets yet.";
+        list.appendChild(empty);
+        return;
+      }
+
+      this.settings.customWidgets.forEach((widget, index) => {
+        const row = document.createElement("div");
+        row.className = "widget-setting-row custom-widget-setting-row";
+        const label = document.createElement("div");
+        label.className = "custom-setting-label";
+        const strong = document.createElement("strong");
+        strong.textContent = this.customWidgetTitle(widget);
+        const small = document.createElement("small");
+        small.textContent = `${widget.type} · ${widget.messageName}.${widget.fieldLabel}`;
+        label.append(strong, small);
+
+        const actions = document.createElement("div");
+        actions.className = "reorder-actions";
+        const buttons = [
+          ["up", "↑", index === 0],
+          ["down", "↓", index === this.settings.customWidgets.length - 1],
+          ["delete", "×", false],
+        ];
+        buttons.forEach(([action, text, disabled]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "icon-button";
+          button.dataset.action = action;
+          button.textContent = text;
+          button.disabled = disabled;
+          button.setAttribute("aria-label", `${action} ${this.customWidgetTitle(widget)}`);
+          button.addEventListener("click", () => {
+            if (action === "delete") {
+              this.settings.customWidgets.splice(index, 1);
+              this.customHistory.delete(widget.id);
+            } else {
+              const destination = action === "up" ? index - 1 : index + 1;
+              [this.settings.customWidgets[index], this.settings.customWidgets[destination]] = [
+                this.settings.customWidgets[destination],
+                this.settings.customWidgets[index],
+              ];
+            }
+            this.commitSettings();
+            this.renderCustomWidgetSettings();
+          });
+          actions.appendChild(button);
+        });
+        row.append(label, actions);
+        list.appendChild(row);
+      });
+    }
+
+    exportDashboard() {
+      const profile = {
+        format: PROFILE_FORMAT,
+        version: PROFILE_VERSION,
+        exportedAt: new Date().toISOString(),
+        settings: this.settings,
+      };
+      const blob = new Blob([JSON.stringify(profile, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `mavmole-dashboard-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      global.setTimeout(() => URL.revokeObjectURL(url), 0);
+      document.querySelector("#profile-status").textContent = "Dashboard profile exported.";
+    }
+
+    async importDashboard(file) {
+      if (file.size > 512 * 1024) {
+        throw new Error("Dashboard profile is too large.");
+      }
+      const profile = JSON.parse(await file.text());
+      if (profile?.format !== PROFILE_FORMAT || !profile.settings) {
+        throw new Error("This is not a MavMole dashboard profile.");
+      }
+      this.settings = normalizeSettings(profile.settings);
+      this.customHistory.clear();
+      this.syncSettingInputs();
+      this.renderWidgetSettings();
+      this.renderCustomWidgetSettings();
+      this.commitSettings();
+      document.querySelector("#profile-status").textContent = `Imported ${this.settings.customWidgets.length} custom widgets.`;
+    }
+
     commitSettings() {
       saveSettings(this.settings);
       this.applySettings();
@@ -400,6 +1017,7 @@
         widget.hidden = !this.settings.visible[id];
         this.root.appendChild(widget);
       }
+      this.ensureCustomWidgets();
 
       this.trail = this.trail.slice(-this.settings.trailPoints);
       if (this.state) {

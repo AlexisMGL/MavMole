@@ -6,6 +6,22 @@
   const SIGNED_FLAG = 0x01;
   const MAX_BUFFER_SIZE = 1024 * 1024;
 
+  function loadDialect() {
+    if (globalScope?.MavMoleDialect) {
+      return globalScope.MavMoleDialect;
+    }
+    if (typeof require === "function") {
+      try {
+        return require("./mavlink-dialect.js");
+      } catch (_error) {
+        // The focused fallback below still supports the core flight dashboard.
+      }
+    }
+    return null;
+  }
+
+  const DIALECT = loadDialect();
+
   const MESSAGE = Object.freeze({
     SYS_STATUS: 1,
     GPS_RAW_INT: 24,
@@ -20,7 +36,7 @@
     AIRSPEED: 295,
   });
 
-  const CRC_EXTRA = new Map([
+  const FALLBACK_CRC_EXTRA = new Map([
     [MESSAGE.SYS_STATUS, 124],
     [MESSAGE.GPS_RAW_INT, 24],
     [MESSAGE.GLOBAL_POSITION_INT, 104],
@@ -33,6 +49,9 @@
     [MESSAGE.BATTERY2, 174],
     [MESSAGE.AIRSPEED, 234],
   ]);
+  const CRC_EXTRA = new Map(
+    DIALECT?.definitions?.map((definition) => [definition[0], definition[4]]) || FALLBACK_CRC_EXTRA,
+  );
 
   function asUint8Array(value) {
     if (value instanceof Uint8Array) {
@@ -172,11 +191,13 @@
         }
 
         if (CRC_EXTRA.has(metadata.messageId)) {
-          messages.push({
+          const packet = {
             ...metadata,
             payload: frame.slice(metadata.headerLength, metadata.headerLength + metadata.payloadLength),
             frame,
-          });
+          };
+          packet.decoded = decodeMavlinkFields(packet);
+          messages.push(packet);
           this.stats.parsed += 1;
         } else {
           this.stats.unsupported += 1;
@@ -213,6 +234,104 @@
       return null;
     }
     return view[method](offset, true);
+  }
+
+  const FORMAT_TYPES = Object.freeze({
+    b: { size: 1, method: "getInt8" },
+    B: { size: 1, method: "getUint8" },
+    c: { size: 1, method: "getUint8" },
+    h: { size: 2, method: "getInt16" },
+    H: { size: 2, method: "getUint16" },
+    i: { size: 4, method: "getInt32" },
+    I: { size: 4, method: "getUint32" },
+    q: { size: 8, method: "getBigInt64" },
+    Q: { size: 8, method: "getBigUint64" },
+    f: { size: 4, method: "getFloat32" },
+    d: { size: 8, method: "getFloat64" },
+    s: { size: 1, method: "getUint8", bytes: true },
+  });
+
+  function formatTokens(format) {
+    const tokens = [];
+    const matcher = /(\d+)?([bBcChHiIqQfds])/g;
+    let match;
+
+    while ((match = matcher.exec(format)) !== null) {
+      const type = match[2].toLowerCase() === "c" ? "c" : match[2];
+      const metadata = FORMAT_TYPES[type];
+      if (!metadata) {
+        continue;
+      }
+      tokens.push({
+        type,
+        count: Number.parseInt(match[1] || "1", 10),
+        ...metadata,
+      });
+    }
+    return tokens;
+  }
+
+  function normalizeDecodedNumber(value) {
+    return typeof value === "bigint" ? Number(value) : value;
+  }
+
+  function unpackPayload(format, payload) {
+    const tokens = formatTokens(format);
+    const fullLength = tokens.reduce((length, token) => length + token.size * token.count, 0);
+    const padded = new Uint8Array(fullLength);
+    padded.set(payload.subarray(0, fullLength));
+    const view = new DataView(padded.buffer);
+    const values = [];
+    let offset = 0;
+
+    for (const token of tokens) {
+      if (token.bytes) {
+        values.push(Array.from(padded.subarray(offset, offset + token.count)));
+        offset += token.count;
+        continue;
+      }
+
+      const decoded = [];
+      for (let index = 0; index < token.count; index += 1) {
+        decoded.push(normalizeDecodedNumber(view[token.method](offset, true)));
+        offset += token.size;
+      }
+      values.push(token.count === 1 ? decoded[0] : decoded);
+    }
+
+    return { tokens, values };
+  }
+
+  function decodeMavlinkFields(packet) {
+    const definition = DIALECT?.get(packet.messageId);
+    if (!definition) {
+      return null;
+    }
+
+    const [messageId, messageName, format, orderMap, _crcExtra, fieldNames] = definition;
+    const unpacked = unpackPayload(format, packet.payload);
+    const fields = {};
+    const descriptors = [];
+
+    fieldNames.forEach((fieldName, fieldIndex) => {
+      const wireIndex = orderMap[fieldIndex];
+      const value = unpacked.values[wireIndex];
+      fields[fieldName] = value;
+      descriptors.push({
+        name: fieldName,
+        arrayLength: Array.isArray(value) ? value.length : 0,
+        numeric: typeof value === "number" || Array.isArray(value),
+      });
+    });
+
+    return {
+      messageId,
+      messageName,
+      systemId: packet.systemId,
+      componentId: packet.componentId,
+      fields,
+      descriptors,
+    };
   }
 
   function validCoordinate(value, minimum, maximum) {
@@ -476,9 +595,12 @@
 
   const api = {
     CRC_EXTRA,
+    DIALECT,
     MESSAGE,
     MavlinkStreamParser,
     TelemetryDecoder,
+    decodeMavlinkFields,
+    formatTokens,
     x25Crc,
   };
 

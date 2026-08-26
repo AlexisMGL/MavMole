@@ -7,6 +7,7 @@
   const disconnectButton = document.querySelector("#disconnect-button");
   const relayStatus = document.querySelector("#relay-status");
   const receivingStatus = document.querySelector("#receiving-status");
+  const viewerCount = document.querySelector("#viewer-count");
   const lastFrame = document.querySelector("#last-frame");
   const parser = new window.MavMoleTelemetry.MavlinkStreamParser();
   const decoder = new window.MavMoleTelemetry.TelemetryDecoder();
@@ -43,6 +44,7 @@
     if (updateStatuses) {
       ui.setStatus(relayStatus, "Disconnected", "idle");
       ui.setStatus(receivingStatus, "Stopped", "idle");
+      ui.renderViewerCount(viewerCount, 0);
     }
   }
 
@@ -68,6 +70,11 @@
       }
 
       if (typeof event.data === "string") {
+        const control = ui.parseRelayControl(event.data);
+        if (control) {
+          ui.renderViewerCount(viewerCount, control.viewers);
+          return;
+        }
         log.warn("Ignored an unexpected text frame from the relay.", { characters: event.data.length });
         return;
       }
@@ -79,6 +86,7 @@
       const messages = parser.push(event.data);
       if (messages.length > 0) {
         for (const message of messages) {
+          dashboard.ingestMessage(message);
           const changed = decoder.ingest(message);
           dashboard.update(decoder.state, changed);
         }
@@ -110,6 +118,7 @@
       setControls(false);
       ui.setStatus(relayStatus, `Closed (code ${event.code})`, event.code === 1000 ? "idle" : "error");
       ui.setStatus(receivingStatus, "Stopped", "idle");
+      ui.renderViewerCount(viewerCount, 0);
       log.warn("Relay connection closed.", { code: event.code, reason: event.reason });
     });
 

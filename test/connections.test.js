@@ -21,7 +21,7 @@ function fakeSocket() {
   };
 }
 
-test("a newer client replaces the previous client for the same role", () => {
+test("a newer Mole replaces the previous source", () => {
   const registry = new ConnectionRegistry(silentLogger);
   const firstMole = fakeSocket();
   const secondMole = fakeSocket();
@@ -35,6 +35,19 @@ test("a newer client replaces the previous client for the same role", () => {
   ]);
 });
 
+test("multiple Diggers can watch the same stream", () => {
+  const registry = new ConnectionRegistry(silentLogger);
+  const firstDigger = fakeSocket();
+  const secondDigger = fakeSocket();
+
+  registry.register(ROLE.DIGGER, firstDigger);
+  registry.register(ROLE.DIGGER, secondDigger);
+
+  assert.deepEqual(registry.all(ROLE.DIGGER), [firstDigger, secondDigger]);
+  assert.equal(registry.count(ROLE.DIGGER), 2);
+  assert.deepEqual(firstDigger.closes, []);
+});
+
 test("closing a replaced client does not remove its replacement", () => {
   const registry = new ConnectionRegistry(silentLogger);
   const firstMole = fakeSocket();
@@ -45,5 +58,5 @@ test("closing a replaced client does not remove its replacement", () => {
 
   assert.equal(registry.remove(ROLE.MOLE, firstMole), false);
   assert.equal(registry.get(ROLE.MOLE), secondMole);
-  assert.deepEqual(registry.snapshot(), { mole: true, digger: false });
+  assert.deepEqual(registry.snapshot(), { mole: true, digger: false, viewers: 0 });
 });

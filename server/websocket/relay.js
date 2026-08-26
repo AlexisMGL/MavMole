@@ -25,27 +25,32 @@ class BinaryRelay {
       return false;
     }
 
-    const digger = this.connections.get(ROLE.DIGGER);
+    const diggers = this.connections
+      .all(ROLE.DIGGER)
+      .filter((digger) => digger.readyState === WebSocket.OPEN);
 
-    if (!digger || digger.readyState !== WebSocket.OPEN) {
+    if (diggers.length === 0) {
       this.framesDropped += 1;
-      this.logger.debug("Dropping a Mole frame because no Digger is connected.", {
+      this.logger.debug("Dropping a Mole frame because no viewer is connected.", {
         bytes: data.length,
       });
       return false;
     }
 
-    digger.send(data, { binary: true }, (error) => {
-      if (error) {
-        this.logger.error("Failed to forward a binary frame.", error);
-      }
-    });
+    for (const digger of diggers) {
+      digger.send(data, { binary: true }, (error) => {
+        if (error) {
+          this.logger.error("Failed to forward a binary frame.", error);
+        }
+      });
+    }
 
     this.framesForwarded += 1;
-    this.bytesForwarded += data.length;
+    this.bytesForwarded += data.length * diggers.length;
     this.logger.debug("Forwarded a binary frame.", {
       bytes: data.length,
       frame: this.framesForwarded,
+      viewers: diggers.length,
     });
     return true;
   }

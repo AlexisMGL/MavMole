@@ -7,50 +7,62 @@ class ConnectionRegistry {
   constructor(logger = createLogger("Connections")) {
     this.logger = logger;
     this.sockets = new Map([
-      [ROLE.MOLE, null],
-      [ROLE.DIGGER, null],
+      [ROLE.MOLE, new Set()],
+      [ROLE.DIGGER, new Set()],
     ]);
   }
 
   register(role, socket) {
-    const previous = this.sockets.get(role);
+    const roleSockets = this.sockets.get(role);
 
-    if (previous && previous !== socket) {
-      this.logger.info(`Replacing the current ${role} connection.`);
-      previous.close(CLOSE_CODE.REPLACED, `A new ${role} connected.`);
+    if (role === ROLE.MOLE) {
+      for (const previous of roleSockets) {
+        if (previous !== socket) {
+          this.logger.info("Replacing the current mole connection.");
+          previous.close(CLOSE_CODE.REPLACED, "A new mole connected.");
+          roleSockets.delete(previous);
+        }
+      }
     }
 
-    this.sockets.set(role, socket);
-    this.logger.info(`${role} connected.`);
+    roleSockets.add(socket);
+    this.logger.info(`${role} connected.`, { count: roleSockets.size });
   }
 
   remove(role, socket) {
-    if (this.sockets.get(role) !== socket) {
-      return false;
+    const removed = this.sockets.get(role).delete(socket);
+    if (removed) {
+      this.logger.info(`${role} disconnected.`, { count: this.count(role) });
     }
-
-    this.sockets.set(role, null);
-    this.logger.info(`${role} disconnected.`);
-    return true;
+    return removed;
   }
 
   get(role) {
-    return this.sockets.get(role) || null;
+    return this.all(role)[0] || null;
+  }
+
+  all(role) {
+    return Array.from(this.sockets.get(role) || []);
+  }
+
+  count(role) {
+    return this.sockets.get(role)?.size || 0;
   }
 
   snapshot() {
     return {
-      mole: Boolean(this.get(ROLE.MOLE)),
-      digger: Boolean(this.get(ROLE.DIGGER)),
+      mole: this.count(ROLE.MOLE) > 0,
+      digger: this.count(ROLE.DIGGER) > 0,
+      viewers: this.count(ROLE.DIGGER),
     };
   }
 
   closeAll() {
-    for (const [role, socket] of this.sockets.entries()) {
-      if (socket) {
+    for (const [role, roleSockets] of this.sockets.entries()) {
+      for (const socket of roleSockets) {
         socket.close(CLOSE_CODE.SHUTDOWN, "MavMole server is restarting.");
-        this.sockets.set(role, null);
       }
+      roleSockets.clear();
     }
   }
 }

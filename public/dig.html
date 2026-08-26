@@ -42,6 +42,10 @@
             <span class="connection-label">Stream</span>
             <span id="receiving-status" class="status" data-state="idle" aria-live="polite">Stopped</span>
           </div>
+          <div>
+            <span class="connection-label">Viewers</span>
+            <span id="viewer-count" class="viewer-count" aria-live="polite">0 viewers</span>
+          </div>
         </div>
         <div class="toolbar-actions">
           <button id="connect-button" type="button">Connect to tunnel</button>
@@ -69,7 +73,8 @@
             </header>
 
             <div class="position-map">
-              <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Local aircraft trail">
+              <div id="satellite-map" class="satellite-map" aria-hidden="true"></div>
+              <svg class="local-map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Local aircraft trail">
                 <defs>
                   <pattern id="map-grid-small" width="10" height="10" patternUnits="userSpaceOnUse">
                     <path d="M 10 0 L 0 0 0 10" fill="none" stroke="currentColor" stroke-width="0.25"></path>
@@ -87,7 +92,7 @@
                 </g>
               </svg>
               <span class="north-indicator">N</span>
-              <span class="trail-label">Local trail</span>
+              <span id="map-provider-status" class="trail-label">Loading satellite</span>
               <div id="position-empty" class="widget-empty">
                 <span class="empty-pulse" aria-hidden="true"></span>
                 Waiting for a valid position
@@ -233,6 +238,57 @@
             </div>
           </section>
 
+          <section class="settings-section" aria-labelledby="custom-widgets-title">
+            <div class="settings-section-heading">
+              <div>
+                <h3 id="custom-widgets-title">Custom MAVLink widgets</h3>
+                <p>Create a value, time graph or gauge from any numeric field observed on this stream.</p>
+              </div>
+            </div>
+            <div class="custom-widget-builder">
+              <div class="settings-grid custom-widget-form">
+                <label class="wide-setting">MAVLink field
+                  <select id="custom-field-select">
+                    <option value="">Connect and receive MAVLink first</option>
+                  </select>
+                </label>
+                <label>Display
+                  <select id="custom-widget-type">
+                    <option value="value">Value</option>
+                    <option value="chart">Time based graph</option>
+                    <option value="gauge">Gauge</option>
+                  </select>
+                </label>
+                <label>Custom label
+                  <input id="custom-widget-label" type="text" maxlength="80" placeholder="Automatic">
+                </label>
+                <label>Unit
+                  <input id="custom-widget-unit" type="text" maxlength="20" placeholder="Optional">
+                </label>
+                <label>Decimals
+                  <input id="custom-widget-decimals" type="number" min="0" max="6" step="1" value="1">
+                </label>
+                <label class="checkbox-setting">Value transform
+                  <span><input id="custom-widget-absolute" type="checkbox"> Absolute value</span>
+                </label>
+                <label data-custom-option="gauge">Gauge minimum
+                  <input id="custom-widget-min" type="number" step="any" value="0">
+                </label>
+                <label data-custom-option="gauge">Gauge maximum
+                  <input id="custom-widget-max" type="number" step="any" value="100">
+                </label>
+                <label data-custom-option="chart">Time window (seconds)
+                  <input id="custom-widget-window" type="number" min="5" max="600" step="5" value="60">
+                </label>
+              </div>
+              <div class="custom-builder-action">
+                <button id="add-custom-widget-button" type="button">Add widget</button>
+                <span id="custom-widget-status" class="settings-status" aria-live="polite"></span>
+              </div>
+            </div>
+            <div id="custom-widget-settings-list" class="widget-settings-list custom-widget-settings-list"></div>
+          </section>
+
           <section class="settings-section" aria-labelledby="scales-settings-title">
             <h3 id="scales-settings-title">Visual scales</h3>
             <div class="settings-grid three-settings">
@@ -246,6 +302,19 @@
                 <input id="altitude-scale" type="number" min="10" max="5000" step="10">
               </label>
             </div>
+          </section>
+
+          <section class="settings-section profile-settings" aria-labelledby="profile-settings-title">
+            <div>
+              <h3 id="profile-settings-title">Dashboard profile</h3>
+              <p>Export the complete layout as JSON or restore it in another browser.</p>
+            </div>
+            <div class="profile-actions">
+              <button id="export-dashboard-button" class="secondary" type="button">Export JSON</button>
+              <button id="import-dashboard-button" class="secondary" type="button">Import JSON</button>
+              <input id="import-dashboard-file" type="file" accept="application/json,.json" hidden>
+            </div>
+            <p id="profile-status" class="settings-status" aria-live="polite"></p>
           </section>
         </div>
 
@@ -262,6 +331,7 @@
     </footer>
     <script src="/js/logger.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/mavlink-dialect.js"></script>
     <script src="/js/mavlink-telemetry.js"></script>
     <script src="/js/telemetry-dashboard.js"></script>
     <script src="/js/digger.js"></script>
