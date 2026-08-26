@@ -72,7 +72,7 @@
               <a id="map-link" class="widget-link" aria-disabled="true" target="_blank" rel="noreferrer">Open map ↗</a>
             </header>
 
-            <div class="position-map">
+            <div class="position-map" data-map-state="loading">
               <div id="satellite-map" class="satellite-map" aria-hidden="true"></div>
               <svg class="local-map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Local aircraft trail">
                 <defs>
@@ -93,6 +93,11 @@
               </svg>
               <span class="north-indicator">N</span>
               <span id="map-provider-status" class="trail-label">Loading satellite</span>
+              <div id="map-setup" class="map-setup" hidden>
+                <strong id="map-setup-title">Google Satellite needs configuration</strong>
+                <span id="map-setup-detail">Add a Google Maps browser key to display satellite imagery.</span>
+                <button id="configure-map-button" class="secondary" type="button">Configure map</button>
+              </div>
               <div id="position-empty" class="widget-empty">
                 <span class="empty-pulse" aria-hidden="true"></span>
                 Waiting for a valid position
@@ -236,6 +241,25 @@
                 <input id="dashboard-accent" type="color" value="#b86238">
               </label>
             </div>
+          </section>
+
+          <section id="map-settings" class="settings-section" aria-labelledby="map-settings-title">
+            <div class="settings-section-heading">
+              <div>
+                <h3 id="map-settings-title">Google Satellite map</h3>
+                <p>Render's <code>GOOGLE_MAPS_API_KEY</code> is used first. As a fallback, save a browser key on this device.</p>
+              </div>
+            </div>
+            <div class="settings-grid map-key-grid">
+              <label class="wide-setting">Browser API key
+                <input id="google-maps-browser-key" type="password" maxlength="256" autocomplete="off" spellcheck="false" placeholder="Paste a restricted Google Maps API key">
+              </label>
+            </div>
+            <div class="map-key-actions">
+              <button id="save-google-maps-key-button" type="button">Save and reload map</button>
+              <button id="clear-google-maps-key-button" class="secondary" type="button">Use Render configuration</button>
+            </div>
+            <p id="map-key-status" class="settings-status" aria-live="polite">The browser key stays on this device and is excluded from dashboard exports.</p>
           </section>
 
           <section class="settings-section" aria-labelledby="custom-widgets-title">

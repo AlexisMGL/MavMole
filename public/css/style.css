@@ -1090,6 +1090,49 @@ pre {
   opacity: 0;
 }
 
+.map-setup {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(calc(100% - 32px), 390px);
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid rgba(57, 69, 57, 0.16);
+  border-radius: 12px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 10px 35px rgba(37, 41, 35, 0.12);
+  transform: translate(-50%, -50%);
+}
+
+.map-setup[hidden] {
+  display: none;
+}
+
+.position-map[data-map-state="error"] .widget-empty {
+  display: none;
+}
+
+.map-setup strong {
+  font-size: 0.82rem;
+}
+
+.map-setup span {
+  color: var(--ink-soft);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.map-setup button {
+  width: max-content;
+  min-height: 34px;
+  margin-top: 4px;
+  padding: 7px 11px;
+  font-size: 0.72rem;
+}
+
 .map-grid-fill {
   color: #c5ccc1;
 }
@@ -1741,6 +1784,17 @@ button.close-button {
   align-items: center;
   gap: 13px;
   margin-top: 15px;
+}
+
+.map-key-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+.map-key-actions + .settings-status {
+  margin-top: 10px;
 }
 
 .settings-status {

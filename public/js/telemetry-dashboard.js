@@ -2,6 +2,8 @@
   "use strict";
 
   const STORAGE_KEY = "mavmole.dashboard.v1";
+  const MAP_KEY_STORAGE_KEY = "mavmole.googleMapsApiKey.v1";
+  const MAP_AUTH_FAILURE_EVENT = "mavmole:google-maps-auth-failure";
   const PROFILE_FORMAT = "mavmole-dashboard";
   const PROFILE_VERSION = 2;
   const CUSTOM_WIDGET_TYPES = new Set(["value", "chart", "gauge"]);
@@ -131,6 +133,27 @@
     }
   }
 
+  function loadBrowserMapKey() {
+    try {
+      return (global.localStorage.getItem(MAP_KEY_STORAGE_KEY) || "").trim().slice(0, 256);
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function saveBrowserMapKey(apiKey) {
+    try {
+      if (apiKey) {
+        global.localStorage.setItem(MAP_KEY_STORAGE_KEY, apiKey);
+      } else {
+        global.localStorage.removeItem(MAP_KEY_STORAGE_KEY);
+      }
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+
   function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
   }
@@ -172,35 +195,77 @@
   }
 
   let googleMapsPromise = null;
+  let googleMapsSource = null;
+  let googleMapsAuthHandlerInstalled = false;
+
+  function createMapError(message, code) {
+    const error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  function installGoogleMapsAuthHandler() {
+    if (googleMapsAuthHandlerInstalled) {
+      return;
+    }
+    googleMapsAuthHandlerInstalled = true;
+    const previousHandler = global.gm_authFailure;
+    global.gm_authFailure = () => {
+      document.dispatchEvent(new CustomEvent(MAP_AUTH_FAILURE_EVENT));
+      if (typeof previousHandler === "function") {
+        previousHandler();
+      }
+    };
+  }
+
+  async function loadMapConfiguration() {
+    let serverKey = "";
+    let configurationError = null;
+    try {
+      const response = await fetch("/api/config", { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`Map configuration returned ${response.status}.`);
+      }
+      const config = await response.json();
+      serverKey = typeof config.googleMapsApiKey === "string" ? config.googleMapsApiKey.trim() : "";
+    } catch (error) {
+      configurationError = error;
+    }
+
+    if (serverKey) {
+      return { apiKey: serverKey, source: "render" };
+    }
+    const browserKey = loadBrowserMapKey();
+    if (browserKey) {
+      return { apiKey: browserKey, source: "browser" };
+    }
+    if (configurationError) {
+      throw createMapError(`Map configuration is unavailable: ${configurationError.message}`, "configuration");
+    }
+    throw createMapError("No Google Maps API key is configured.", "missing-key");
+  }
 
   async function loadGoogleMaps() {
     if (global.google?.maps?.Map) {
-      return global.google.maps;
+      return { maps: global.google.maps, source: googleMapsSource || "existing" };
     }
     if (googleMapsPromise) {
       return googleMapsPromise;
     }
 
-    googleMapsPromise = fetch("/api/config", { cache: "no-store" })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`Map configuration returned ${response.status}.`);
-        }
-        return response.json();
-      })
+    googleMapsPromise = loadMapConfiguration()
       .then((config) => {
-        if (!config.googleMapsApiKey) {
-          throw new Error("GOOGLE_MAPS_API_KEY is not configured.");
-        }
+        googleMapsSource = config.source;
+        installGoogleMapsAuthHandler();
         return new Promise((resolve, reject) => {
           const callbackName = `__mavMoleGoogleMapsReady${Date.now()}`;
           global[callbackName] = () => {
             delete global[callbackName];
-            resolve(global.google.maps);
+            resolve({ maps: global.google.maps, source: config.source });
           };
           const script = document.createElement("script");
           const query = new URLSearchParams({
-            key: config.googleMapsApiKey,
+            key: config.apiKey,
             callback: callbackName,
             loading: "async",
             v: "weekly",
@@ -210,7 +275,7 @@
           script.async = true;
           script.onerror = () => {
             delete global[callbackName];
-            reject(new Error("Google Maps JavaScript API failed to load."));
+            reject(createMapError("Google Maps JavaScript API failed to load.", "load-failure"));
           };
           document.head.appendChild(script);
         });
@@ -219,19 +284,28 @@
   }
 
   class SatelliteMap {
-    constructor(container, statusElement) {
+    constructor(container, statusElement, setupElement, setupTitle, setupDetail) {
       this.container = container;
       this.statusElement = statusElement;
+      this.setupElement = setupElement;
+      this.setupTitle = setupTitle;
+      this.setupDetail = setupDetail;
       this.map = null;
       this.marker = null;
       this.polyline = null;
       this.pendingTrail = [];
+      document.addEventListener(MAP_AUTH_FAILURE_EVENT, () => {
+        this.showFailure(createMapError(
+          "Google refused the API key. Check billing, Maps JavaScript API and website restrictions.",
+          "auth-failure",
+        ));
+      });
       this.initialize();
     }
 
     async initialize() {
       try {
-        const maps = await loadGoogleMaps();
+        const { maps, source } = await loadGoogleMaps();
         this.map = new maps.Map(this.container, {
           center: { lat: 0, lng: 0 },
           zoom: 18,
@@ -253,13 +327,29 @@
           zIndex: 4,
         });
         this.container.parentElement.dataset.mapState = "satellite";
+        this.container.parentElement.dataset.mapSource = source;
+        this.setupElement.hidden = true;
         this.statusElement.textContent = "Google Satellite";
+        this.statusElement.title = source === "render" ? "Using the Render configuration" : "Using this browser's key";
         this.update(this.pendingTrail);
       } catch (error) {
-        this.container.parentElement.dataset.mapState = "fallback";
-        this.statusElement.textContent = "Local trail";
-        this.statusElement.title = error.message;
+        this.showFailure(error);
       }
+    }
+
+    showFailure(error) {
+      const missingKey = error.code === "missing-key";
+      this.container.parentElement.dataset.mapState = "error";
+      this.container.parentElement.removeAttribute("data-map-source");
+      this.statusElement.textContent = missingKey ? "Satellite setup required" : "Satellite unavailable";
+      this.statusElement.title = error.message;
+      this.setupTitle.textContent = missingKey
+        ? "Google Satellite needs configuration"
+        : "Google Satellite could not load";
+      this.setupDetail.textContent = missingKey
+        ? "Add GOOGLE_MAPS_API_KEY on Render or save a browser key in dashboard settings."
+        : error.message;
+      this.setupElement.hidden = false;
     }
 
     reset() {
@@ -309,6 +399,9 @@
         freshness: document.querySelector("#telemetry-freshness"),
         satelliteMap: document.querySelector("#satellite-map"),
         mapProviderStatus: document.querySelector("#map-provider-status"),
+        mapSetup: document.querySelector("#map-setup"),
+        mapSetupTitle: document.querySelector("#map-setup-title"),
+        mapSetupDetail: document.querySelector("#map-setup-detail"),
         positionEmpty: document.querySelector("#position-empty"),
         positionTrail: document.querySelector("#position-trail"),
         vehicleMarker: document.querySelector("#vehicle-marker"),
@@ -332,7 +425,13 @@
         batterySource: document.querySelector("#battery-source"),
       };
 
-      this.satelliteMap = new SatelliteMap(this.elements.satelliteMap, this.elements.mapProviderStatus);
+      this.satelliteMap = new SatelliteMap(
+        this.elements.satelliteMap,
+        this.elements.mapProviderStatus,
+        this.elements.mapSetup,
+        this.elements.mapSetupTitle,
+        this.elements.mapSetupDetail,
+      );
 
       this.bindSettings();
       this.applySettings();
@@ -718,12 +817,18 @@
     }
 
     bindSettings() {
-      document.querySelector("#customize-dashboard-button").addEventListener("click", () => {
+      const openSettings = (sectionId) => {
         this.renderWidgetSettings();
         this.renderCustomWidgetSettings();
         this.syncFieldOptions();
+        this.syncMapSettings();
         this.settingsDialog.showModal();
-      });
+        if (sectionId) {
+          document.querySelector(sectionId)?.scrollIntoView({ block: "start" });
+        }
+      };
+      document.querySelector("#customize-dashboard-button").addEventListener("click", () => openSettings());
+      document.querySelector("#configure-map-button").addEventListener("click", () => openSettings("#map-settings"));
       document.querySelector("#close-settings-button").addEventListener("click", () => this.settingsDialog.close());
       document.querySelector("#done-settings-button").addEventListener("click", () => this.settingsDialog.close());
       document.querySelector("#reset-dashboard-button").addEventListener("click", () => {
@@ -762,6 +867,31 @@
       document.querySelector("#add-custom-widget-button").addEventListener("click", () => {
         this.addCustomWidget();
       });
+      document.querySelector("#save-google-maps-key-button").addEventListener("click", () => {
+        const input = document.querySelector("#google-maps-browser-key");
+        const status = document.querySelector("#map-key-status");
+        const apiKey = input.value.trim();
+        if (!apiKey) {
+          status.textContent = "Paste a Google Maps API key first.";
+          input.focus();
+          return;
+        }
+        if (!saveBrowserMapKey(apiKey)) {
+          status.textContent = "This browser did not allow the key to be saved.";
+          return;
+        }
+        status.textContent = "Browser key saved. Reloading the map...";
+        global.setTimeout(() => global.location.reload(), 120);
+      });
+      document.querySelector("#clear-google-maps-key-button").addEventListener("click", () => {
+        const status = document.querySelector("#map-key-status");
+        if (!saveBrowserMapKey("")) {
+          status.textContent = "This browser did not allow the saved key to be removed.";
+          return;
+        }
+        status.textContent = "Browser key removed. Reloading with the Render configuration...";
+        global.setTimeout(() => global.location.reload(), 120);
+      });
       document.querySelector("#export-dashboard-button").addEventListener("click", () => {
         this.exportDashboard();
       });
@@ -794,6 +924,25 @@
       document.querySelector("#trail-points").value = this.settings.trailPoints;
       document.querySelector("#airspeed-scale").value = this.settings.airspeedScaleMps;
       document.querySelector("#altitude-scale").value = this.settings.altitudeScaleM;
+    }
+
+    syncMapSettings() {
+      const browserKey = loadBrowserMapKey();
+      const input = document.querySelector("#google-maps-browser-key");
+      const status = document.querySelector("#map-key-status");
+      input.value = browserKey;
+      document.querySelector("#clear-google-maps-key-button").disabled = !browserKey;
+
+      const map = this.elements.satelliteMap.parentElement;
+      if (map.dataset.mapState === "satellite") {
+        status.textContent = map.dataset.mapSource === "render"
+          ? "Google Satellite is active with the Render configuration."
+          : "Google Satellite is active with the key saved in this browser.";
+      } else if (browserKey) {
+        status.textContent = "A browser key is saved, but Google Satellite is currently unavailable. Check its API restrictions.";
+      } else {
+        status.textContent = "No browser key is saved. Configure GOOGLE_MAPS_API_KEY on Render or paste one here.";
+      }
     }
 
     renderWidgetSettings() {
