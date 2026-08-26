@@ -2,8 +2,7 @@
   "use strict";
 
   const STORAGE_KEY = "mavmole.dashboard.v1";
-  const MAP_KEY_STORAGE_KEY = "mavmole.googleMapsApiKey.v1";
-  const MAP_AUTH_FAILURE_EVENT = "mavmole:google-maps-auth-failure";
+  const ESRI_SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const PROFILE_FORMAT = "mavmole-dashboard";
   const PROFILE_VERSION = 2;
   const CUSTOM_WIDGET_TYPES = new Set(["value", "chart", "gauge"]);
@@ -133,27 +132,6 @@
     }
   }
 
-  function loadBrowserMapKey() {
-    try {
-      return (global.localStorage.getItem(MAP_KEY_STORAGE_KEY) || "").trim().slice(0, 256);
-    } catch (_error) {
-      return "";
-    }
-  }
-
-  function saveBrowserMapKey(apiKey) {
-    try {
-      if (apiKey) {
-        global.localStorage.setItem(MAP_KEY_STORAGE_KEY, apiKey);
-      } else {
-        global.localStorage.removeItem(MAP_KEY_STORAGE_KEY);
-      }
-      return true;
-    } catch (_error) {
-      return false;
-    }
-  }
-
   function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
   }
@@ -194,95 +172,6 @@
     return { value: meters.toFixed(1), unit: "m" };
   }
 
-  let googleMapsPromise = null;
-  let googleMapsSource = null;
-  let googleMapsAuthHandlerInstalled = false;
-
-  function createMapError(message, code) {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  }
-
-  function installGoogleMapsAuthHandler() {
-    if (googleMapsAuthHandlerInstalled) {
-      return;
-    }
-    googleMapsAuthHandlerInstalled = true;
-    const previousHandler = global.gm_authFailure;
-    global.gm_authFailure = () => {
-      document.dispatchEvent(new CustomEvent(MAP_AUTH_FAILURE_EVENT));
-      if (typeof previousHandler === "function") {
-        previousHandler();
-      }
-    };
-  }
-
-  async function loadMapConfiguration() {
-    let serverKey = "";
-    let configurationError = null;
-    try {
-      const response = await fetch("/api/config", { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error(`Map configuration returned ${response.status}.`);
-      }
-      const config = await response.json();
-      serverKey = typeof config.googleMapsApiKey === "string" ? config.googleMapsApiKey.trim() : "";
-    } catch (error) {
-      configurationError = error;
-    }
-
-    if (serverKey) {
-      return { apiKey: serverKey, source: "render" };
-    }
-    const browserKey = loadBrowserMapKey();
-    if (browserKey) {
-      return { apiKey: browserKey, source: "browser" };
-    }
-    if (configurationError) {
-      throw createMapError(`Map configuration is unavailable: ${configurationError.message}`, "configuration");
-    }
-    throw createMapError("No Google Maps API key is configured.", "missing-key");
-  }
-
-  async function loadGoogleMaps() {
-    if (global.google?.maps?.Map) {
-      return { maps: global.google.maps, source: googleMapsSource || "existing" };
-    }
-    if (googleMapsPromise) {
-      return googleMapsPromise;
-    }
-
-    googleMapsPromise = loadMapConfiguration()
-      .then((config) => {
-        googleMapsSource = config.source;
-        installGoogleMapsAuthHandler();
-        return new Promise((resolve, reject) => {
-          const callbackName = `__mavMoleGoogleMapsReady${Date.now()}`;
-          global[callbackName] = () => {
-            delete global[callbackName];
-            resolve({ maps: global.google.maps, source: config.source });
-          };
-          const script = document.createElement("script");
-          const query = new URLSearchParams({
-            key: config.apiKey,
-            callback: callbackName,
-            loading: "async",
-            v: "weekly",
-            auth_referrer_policy: "origin",
-          });
-          script.src = `https://maps.googleapis.com/maps/api/js?${query}`;
-          script.async = true;
-          script.onerror = () => {
-            delete global[callbackName];
-            reject(createMapError("Google Maps JavaScript API failed to load.", "load-failure"));
-          };
-          document.head.appendChild(script);
-        });
-      });
-    return googleMapsPromise;
-  }
-
   class SatelliteMap {
     constructor(container, statusElement, setupElement, setupTitle, setupDetail) {
       this.container = container;
@@ -293,69 +182,109 @@
       this.map = null;
       this.marker = null;
       this.polyline = null;
+      this.tileLayer = null;
       this.pendingTrail = [];
-      document.addEventListener(MAP_AUTH_FAILURE_EVENT, () => {
-        this.showFailure(createMapError(
-          "Google refused the API key. Check billing, Maps JavaScript API and website restrictions.",
-          "auth-failure",
-        ));
-      });
+      this.hasPosition = false;
+      this.loadTimer = null;
       this.initialize();
     }
 
-    async initialize() {
+    initialize() {
       try {
-        const { maps, source } = await loadGoogleMaps();
-        this.map = new maps.Map(this.container, {
-          center: { lat: 0, lng: 0 },
-          zoom: 18,
-          mapTypeId: "satellite",
-          disableDefaultUI: true,
-          clickableIcons: false,
-          keyboardShortcuts: false,
-          gestureHandling: "cooperative",
+        const leaflet = global.L;
+        if (!leaflet?.map || !leaflet?.tileLayer) {
+          throw new Error("Leaflet could not be loaded from the map provider.");
+        }
+
+        this.map = leaflet.map(this.container, {
+          center: [0, 0],
+          zoom: 2,
+          zoomControl: false,
+          attributionControl: true,
+          keyboard: false,
+          worldCopyJump: true,
         });
-        this.polyline = new maps.Polyline({
-          map: this.map,
-          strokeColor: "#f07a3c",
-          strokeOpacity: 0.95,
-          strokeWeight: 3,
+        this.polyline = leaflet.polyline([], {
+          color: "#f07a3c",
+          opacity: 0.95,
+          weight: 3,
+          interactive: false,
+        }).addTo(this.map);
+        this.tileLayer = leaflet.tileLayer(ESRI_SATELLITE_TILES, {
+          attribution: "Tiles &copy; Esri",
+          maxZoom: 20,
         });
-        this.marker = new maps.Marker({
-          map: this.map,
-          title: "Aircraft",
-          zIndex: 4,
+        let loadedTiles = 0;
+        const markReady = () => {
+          if (loadedTiles === 0) {
+            this.showFailure(new Error("Esri World Imagery did not return map tiles."));
+            return;
+          }
+          global.clearTimeout(this.loadTimer);
+          this.container.parentElement.dataset.mapState = "satellite";
+          this.setupElement.hidden = true;
+          this.statusElement.textContent = "Satellite";
+          this.statusElement.title = "Esri World Imagery";
+        };
+        this.tileLayer.on("tileload", () => {
+          loadedTiles += 1;
         });
-        this.container.parentElement.dataset.mapState = "satellite";
-        this.container.parentElement.dataset.mapSource = source;
-        this.setupElement.hidden = true;
-        this.statusElement.textContent = "Google Satellite";
-        this.statusElement.title = source === "render" ? "Using the Render configuration" : "Using this browser's key";
+        this.tileLayer.once("load", markReady);
+        this.tileLayer.addTo(this.map);
+        this.loadTimer = global.setTimeout(() => {
+          if (this.container.parentElement.dataset.mapState !== "satellite") {
+            this.showFailure(new Error("Esri World Imagery did not return map tiles."));
+          }
+        }, 8000);
+
+        if (global.ResizeObserver) {
+          this.resizeObserver = new global.ResizeObserver(() => this.map?.invalidateSize({ pan: false }));
+          this.resizeObserver.observe(this.container);
+        }
         this.update(this.pendingTrail);
       } catch (error) {
         this.showFailure(error);
       }
     }
 
+    createMarker(position) {
+      const icon = global.L.divIcon({
+        className: "mavmole-map-marker",
+        html: `
+          <span class="aircraft-map-symbol" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 1 L19 21 L12 17 L5 21 Z"></path></svg>
+          </span>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+      });
+      this.marker = global.L.marker(position, {
+        icon,
+        interactive: false,
+        keyboard: false,
+        title: "Aircraft",
+        zIndexOffset: 500,
+      }).addTo(this.map);
+    }
+
     showFailure(error) {
-      const missingKey = error.code === "missing-key";
+      global.clearTimeout(this.loadTimer);
       this.container.parentElement.dataset.mapState = "error";
-      this.container.parentElement.removeAttribute("data-map-source");
-      this.statusElement.textContent = missingKey ? "Satellite setup required" : "Satellite unavailable";
+      this.statusElement.textContent = "Satellite unavailable";
       this.statusElement.title = error.message;
-      this.setupTitle.textContent = missingKey
-        ? "Google Satellite needs configuration"
-        : "Google Satellite could not load";
-      this.setupDetail.textContent = missingKey
-        ? "Add GOOGLE_MAPS_API_KEY on Render or save a browser key in dashboard settings."
-        : error.message;
+      this.setupTitle.textContent = "Satellite imagery could not load";
+      this.setupDetail.textContent = `${error.message} Check the internet connection and retry.`;
       this.setupElement.hidden = false;
     }
 
     reset() {
       this.pendingTrail = [];
-      this.polyline?.setPath([]);
-      this.marker?.setMap(null);
+      this.hasPosition = false;
+      this.polyline?.setLatLngs([]);
+      if (this.marker && this.map) {
+        this.map.removeLayer(this.marker);
+        this.marker = null;
+      }
+      this.map?.setView([0, 0], 2, { animate: false });
     }
 
     update(trail) {
@@ -364,22 +293,27 @@
         return;
       }
 
-      const path = trail.map((point) => ({ lat: point.lat, lng: point.lon }));
+      const path = trail.map((point) => [point.lat, point.lon]);
       const last = trail.at(-1);
       const position = path.at(-1);
-      this.polyline.setPath(path);
-      this.marker.setMap(this.map);
-      this.marker.setPosition(position);
-      this.marker.setIcon({
-        path: global.google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-        fillColor: "#f07a3c",
-        fillOpacity: 1,
-        strokeColor: "#ffffff",
-        strokeWeight: 2,
-        rotation: Number.isFinite(last.heading) ? last.heading : 0,
-        scale: 6,
-      });
-      this.map.setCenter(position);
+      this.polyline.setLatLngs(path);
+      if (!this.marker) {
+        this.createMarker(position);
+      } else {
+        this.marker.setLatLng(position);
+      }
+      const symbol = this.marker.getElement()?.querySelector(".aircraft-map-symbol");
+      if (symbol) {
+        const heading = Number.isFinite(last.heading) ? last.heading : 0;
+        symbol.style.transform = `rotate(${heading}deg)`;
+      }
+
+      if (!this.hasPosition) {
+        this.map.setView(position, 18, { animate: false });
+        this.hasPosition = true;
+      } else {
+        this.map.panTo(position, { animate: false });
+      }
     }
   }
 
@@ -817,18 +751,14 @@
     }
 
     bindSettings() {
-      const openSettings = (sectionId) => {
+      const openSettings = () => {
         this.renderWidgetSettings();
         this.renderCustomWidgetSettings();
         this.syncFieldOptions();
-        this.syncMapSettings();
         this.settingsDialog.showModal();
-        if (sectionId) {
-          document.querySelector(sectionId)?.scrollIntoView({ block: "start" });
-        }
       };
       document.querySelector("#customize-dashboard-button").addEventListener("click", () => openSettings());
-      document.querySelector("#configure-map-button").addEventListener("click", () => openSettings("#map-settings"));
+      document.querySelector("#retry-map-button").addEventListener("click", () => global.location.reload());
       document.querySelector("#close-settings-button").addEventListener("click", () => this.settingsDialog.close());
       document.querySelector("#done-settings-button").addEventListener("click", () => this.settingsDialog.close());
       document.querySelector("#reset-dashboard-button").addEventListener("click", () => {
@@ -867,31 +797,6 @@
       document.querySelector("#add-custom-widget-button").addEventListener("click", () => {
         this.addCustomWidget();
       });
-      document.querySelector("#save-google-maps-key-button").addEventListener("click", () => {
-        const input = document.querySelector("#google-maps-browser-key");
-        const status = document.querySelector("#map-key-status");
-        const apiKey = input.value.trim();
-        if (!apiKey) {
-          status.textContent = "Paste a Google Maps API key first.";
-          input.focus();
-          return;
-        }
-        if (!saveBrowserMapKey(apiKey)) {
-          status.textContent = "This browser did not allow the key to be saved.";
-          return;
-        }
-        status.textContent = "Browser key saved. Reloading the map...";
-        global.setTimeout(() => global.location.reload(), 120);
-      });
-      document.querySelector("#clear-google-maps-key-button").addEventListener("click", () => {
-        const status = document.querySelector("#map-key-status");
-        if (!saveBrowserMapKey("")) {
-          status.textContent = "This browser did not allow the saved key to be removed.";
-          return;
-        }
-        status.textContent = "Browser key removed. Reloading with the Render configuration...";
-        global.setTimeout(() => global.location.reload(), 120);
-      });
       document.querySelector("#export-dashboard-button").addEventListener("click", () => {
         this.exportDashboard();
       });
@@ -924,25 +829,6 @@
       document.querySelector("#trail-points").value = this.settings.trailPoints;
       document.querySelector("#airspeed-scale").value = this.settings.airspeedScaleMps;
       document.querySelector("#altitude-scale").value = this.settings.altitudeScaleM;
-    }
-
-    syncMapSettings() {
-      const browserKey = loadBrowserMapKey();
-      const input = document.querySelector("#google-maps-browser-key");
-      const status = document.querySelector("#map-key-status");
-      input.value = browserKey;
-      document.querySelector("#clear-google-maps-key-button").disabled = !browserKey;
-
-      const map = this.elements.satelliteMap.parentElement;
-      if (map.dataset.mapState === "satellite") {
-        status.textContent = map.dataset.mapSource === "render"
-          ? "Google Satellite is active with the Render configuration."
-          : "Google Satellite is active with the key saved in this browser.";
-      } else if (browserKey) {
-        status.textContent = "A browser key is saved, but Google Satellite is currently unavailable. Check its API restrictions.";
-      } else {
-        status.textContent = "No browser key is saved. Configure GOOGLE_MAPS_API_KEY on Render or paste one here.";
-      }
     }
 
     renderWidgetSettings() {

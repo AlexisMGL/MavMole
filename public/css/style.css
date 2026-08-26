@@ -1086,6 +1086,34 @@ pre {
   inset: 0;
 }
 
+.mavmole-map-marker {
+  border: 0;
+  background: transparent;
+}
+
+.aircraft-map-symbol {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  filter: drop-shadow(0 2px 4px rgba(20, 23, 19, 0.45));
+  transform-origin: center;
+  transition: transform 120ms linear;
+}
+
+.aircraft-map-symbol svg {
+  width: 30px;
+  height: 30px;
+  overflow: visible;
+}
+
+.aircraft-map-symbol path {
+  fill: var(--dashboard-accent);
+  stroke: #fff;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
 .position-map[data-map-state="satellite"] .local-map-overlay {
   opacity: 0;
 }
@@ -1784,17 +1812,6 @@ button.close-button {
   align-items: center;
   gap: 13px;
   margin-top: 15px;
-}
-
-.map-key-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 9px;
-  margin-top: 13px;
-}
-
-.map-key-actions + .settings-status {
-  margin-top: 10px;
 }
 
 .settings-status {

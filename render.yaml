@@ -10,5 +10,3 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.22.0
-      - key: GOOGLE_MAPS_API_KEY
-        sync: false

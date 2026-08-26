@@ -29,7 +29,7 @@ Navigateur Digger
 - des widgets Valeur, courbe temporelle et jauge peuvent être créés depuis n'importe quel champ numérique des 338 messages du dialecte MAVLink embarqué ;
 - la configuration complète du dashboard peut être exportée et importée en JSON ;
 - les pages Mole et Digger affichent en temps réel le nombre de viewers connectés au stream ;
-- la carte utilise Google Satellite lorsque `GOOGLE_MAPS_API_KEY` est configuré, avec la trace locale comme fallback ;
+- la carte charge automatiquement le fond satellite Esri World Imagery utilisé par le GNSS dashboard, sans clé ni configuration ;
 - les compteurs de transport et le dernier paquet brut restent disponibles dans les diagnostics.
 
 ## Identité visuelle
@@ -68,15 +68,6 @@ Ouvrir ensuite :
 - `http://localhost:3000/mole` sur le PC de Mission Planner et cliquer sur **Connect and forward**.
 
 L’état technique du service est disponible sur `http://localhost:3000/healthz`.
-
-Pour activer le fond Google Satellite, fournir une clé autorisée pour la Maps JavaScript API :
-
-```powershell
-$env:GOOGLE_MAPS_API_KEY="your-restricted-browser-key"
-npm start
-```
-
-Sur Render, renseigner `GOOGLE_MAPS_API_KEY` dans les variables d'environnement. Restreindre la clé à la Maps JavaScript API et aux référents HTTP du site.
 
 Le catalogue compact de champs MAVLink est généré depuis le fichier mavgen utilisé par TelemetryDashboard. Pour le reconstruire :
 

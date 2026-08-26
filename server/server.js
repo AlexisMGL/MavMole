@@ -49,13 +49,6 @@ function createMavMoleServer() {
     });
   });
 
-  app.get("/api/config", (_request, response) => {
-    response.set("Cache-Control", "no-store");
-    response.json({
-      googleMapsApiKey: process.env.GOOGLE_MAPS_API_KEY || null,
-    });
-  });
-
   app.get("/mole", (_request, response) => {
     response.sendFile(path.join(publicDirectory, "mole.html"));
   });

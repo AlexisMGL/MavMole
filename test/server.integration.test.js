@@ -70,10 +70,6 @@ test("serves the app and relays a binary frame end to end", async (context) => {
   assert.equal(dialectResponse.status, 200);
   assert.match(dialectResponse.headers.get("content-type"), /javascript/);
 
-  const configResponse = await fetch(`${httpUrl}/api/config`);
-  assert.equal(configResponse.status, 200);
-  assert.ok(Object.hasOwn(await configResponse.json(), "googleMapsApiKey"));
-
   const digger = await openWebSocket(`${wsUrl}/ws?role=digger`);
   const mole = await openWebSocket(`${wsUrl}/ws?role=mole`);
   context.after(() => {
