@@ -9,75 +9,88 @@
     <link rel="stylesheet" href="/css/style.css">
   </head>
   <body class="tool-page digger-page">
-    <img class="side-banner side-banner-left" src="/assets/banners/side-left.png" alt="" aria-hidden="true">
-    <img class="side-banner side-banner-right" src="/assets/banners/side-right.png" alt="" aria-hidden="true">
+    <header class="app-header">
+      <a class="brand" href="/" aria-label="MavMole home">
+        <img src="/assets/icons/mole-small.png" alt="">
+        <span>MavMole</span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a class="text-link" href="/">Home</a>
+        <a class="mode-link" href="/mole"><span aria-hidden="true">←</span> Open Mole</a>
+      </nav>
+    </header>
 
     <main class="tool-shell">
-      <nav class="topbar" aria-label="Primary navigation">
-        <a class="home-link" href="/" aria-label="Back to MavMole home">
-          <img src="/assets/brand/mavmole-banner.png" alt="MavMole">
-        </a>
-        <a class="text-link" href="/mole"><span aria-hidden="true">←</span> Open Mole</a>
-      </nav>
-
       <header class="page-heading">
         <div>
-          <p class="eyebrow">Viewer mode</p>
-          <h1>Dig a Molehill</h1>
-          <p>Join the other end of the tunnel and verify that binary MAVLink data is arriving live.</p>
+          <p class="eyebrow">Viewer workspace</p>
+          <h1>Monitor the stream</h1>
+          <p>Join the far end of the tunnel and confirm that raw MAVLink data is arriving live.</p>
         </div>
-        <div class="sprite sprite-walk" role="img" aria-label="Animated mole walking through a tunnel"></div>
+        <span class="mode-badge">Digger</span>
       </header>
 
-      <section class="control-panel connect-panel">
-        <div>
-          <p class="eyebrow">Public relay</p>
-          <h2>Ready to dig?</h2>
-          <p>Connect this browser as the only Digger. The newest Digger replaces any previous viewer.</p>
-        </div>
-        <div class="actions">
-          <button id="connect-button" type="button">Connect to tunnel</button>
-          <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
-        </div>
-      </section>
-
-      <section class="telemetry-panel" aria-labelledby="stream-status-title">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Live diagnostics</p>
-            <h2 id="stream-status-title">Stream status</h2>
+      <div class="workspace-grid">
+        <section class="control-panel connect-panel" aria-labelledby="connect-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Public relay</p>
+              <h2 id="connect-title">Connection</h2>
+            </div>
+            <span class="panel-number">01</span>
           </div>
-          <span class="live-chip">Monitor</span>
-        </div>
-
-        <dl class="status-grid">
-          <dt>MavMole relay</dt>
-          <dd id="relay-status" class="status" data-state="idle" aria-live="polite">Disconnected</dd>
-          <dt>Binary stream</dt>
-          <dd id="receiving-status" class="status" data-state="idle" aria-live="polite">Stopped</dd>
-        </dl>
-
-        <dl class="metrics-grid three-metrics">
-          <div><dt>Frames</dt><dd id="frame-count">0</dd></div>
-          <div><dt>Data</dt><dd id="byte-count">0 B</dd></div>
-          <div><dt>Current rate</dt><dd id="byte-rate">0 B/s</dd></div>
-        </dl>
-      </section>
-
-      <section class="frame-panel">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Raw inspection</p>
-            <h2>Last binary frame</h2>
+          <p>Connect this browser as the active Digger. A new Digger replaces the previous viewer.</p>
+          <div class="actions">
+            <button id="connect-button" type="button">Connect to tunnel</button>
+            <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
           </div>
-          <span class="hex-chip">HEX · 32 BYTES</span>
-        </div>
-        <pre id="last-frame" aria-live="polite">No frame received yet.</pre>
-        <p class="field-help">Only the first 32 bytes are shown. The stream is not decoded or stored.</p>
-      </section>
+        </section>
+
+        <section class="telemetry-panel" aria-labelledby="stream-status-title">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Live diagnostics</p>
+              <h2 id="stream-status-title">Stream status</h2>
+            </div>
+            <span class="live-chip">Live</span>
+          </div>
+
+          <dl class="status-grid">
+            <div>
+              <dt>MavMole relay</dt>
+              <dd id="relay-status" class="status" data-state="idle" aria-live="polite">Disconnected</dd>
+            </div>
+            <div>
+              <dt>Binary stream</dt>
+              <dd id="receiving-status" class="status" data-state="idle" aria-live="polite">Stopped</dd>
+            </div>
+          </dl>
+
+          <dl class="metrics-grid three-metrics">
+            <div><dt>Frames</dt><dd id="frame-count">0</dd></div>
+            <div><dt>Data</dt><dd id="byte-count">0 B</dd></div>
+            <div><dt>Current rate</dt><dd id="byte-rate">0 B/s</dd></div>
+          </dl>
+        </section>
+
+        <section class="frame-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Raw inspection</p>
+              <h2>Last binary frame</h2>
+            </div>
+            <span class="hex-chip">HEX · 32 bytes</span>
+          </div>
+          <pre id="last-frame" aria-live="polite">No frame received yet.</pre>
+          <p class="field-help">Only the first 32 bytes are shown. The stream is never decoded or stored.</p>
+        </section>
+      </div>
     </main>
 
-    <footer class="tunnel-footer compact-footer">Mole → MavMole relay → Digger</footer>
+    <footer class="site-footer compact-footer">
+      <span>Mole → MavMole relay → Digger</span>
+      <span>Raw binary transport</span>
+    </footer>
     <script src="/js/logger.js"></script>
     <script src="/js/app.js"></script>
     <script src="/js/digger.js"></script>
