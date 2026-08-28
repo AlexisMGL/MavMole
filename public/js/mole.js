@@ -7,7 +7,7 @@
   const localUrlInput = document.querySelector("#local-url");
   const connectLocalButton = document.querySelector("#connect-local-button");
   const disconnectLocalButton = document.querySelector("#disconnect-local-button");
-  const startForwardingButton = document.querySelector("#start-forwarding-button");
+  const connectForwardButton = document.querySelector("#connect-forward-button");
   const stopForwardingButton = document.querySelector("#stop-forwarding-button");
   const localStatus = document.querySelector("#local-status");
   const relayStatus = document.querySelector("#relay-status");
@@ -23,6 +23,7 @@
   let localAttempt = 0;
   let relayAttempt = 0;
   let forwardingRequested = false;
+  let connectForwardPending = false;
   let forwardedFrames = 0;
 
   const stats = new ui.StreamStats({
@@ -43,10 +44,15 @@
   function renderControls() {
     const localBusy = isConnecting(localSocket);
     const localConnected = isOpen(localSocket);
-    connectLocalButton.disabled = localBusy || localConnected;
+    connectLocalButton.disabled = connectForwardPending || localBusy || localConnected;
     disconnectLocalButton.disabled = !localSocket;
-    localUrlInput.disabled = localBusy || localConnected;
-    startForwardingButton.disabled = !localConnected || forwardingRequested || Boolean(relaySocket);
+    localUrlInput.disabled = connectForwardPending || localBusy || localConnected;
+    connectForwardButton.disabled = connectForwardPending || forwardingRequested || Boolean(relaySocket);
+    connectForwardButton.textContent = connectForwardPending
+      ? "Connecting + forwarding…"
+      : forwardingRequested || relaySocket
+        ? "Connected + forwarding"
+        : "Connect + forward";
     stopForwardingButton.disabled = !forwardingRequested && !relaySocket;
   }
 
@@ -135,7 +141,7 @@
       ui.setStatus(localStatus, error.message, "error");
       log.error("Invalid Mission Planner URL.", error);
       renderControls();
-      return;
+      return false;
     }
 
     stats.reset();
@@ -154,7 +160,7 @@
       ui.setStatus(localStatus, "Browser blocked the local WebSocket", "error");
       renderControls();
       log.error("Browser refused the Mission Planner WebSocket.", error);
-      return;
+      return false;
     }
     socket.binaryType = "arraybuffer";
     localSocket = socket;
@@ -200,17 +206,51 @@
     try {
       await ui.waitForOpen(socket, "Mission Planner");
       if (attempt !== localAttempt || localSocket !== socket) {
-        return;
+        return false;
       }
       ui.setStatus(localStatus, "Connected · waiting for MAVLink", "connected");
       renderControls();
       log.info("Mission Planner connected locally. Relay forwarding remains off.");
+      return true;
     } catch (error) {
       if (attempt !== localAttempt || localSocket !== socket) {
-        return;
+        return false;
       }
       log.error("Could not connect locally to Mission Planner.", error);
       closeSocket(socket, "Mission Planner WebSocket");
+      return false;
+    }
+  }
+
+  async function connectAndForward() {
+    if (connectForwardPending || forwardingRequested || relaySocket) {
+      return;
+    }
+    connectForwardPending = true;
+    renderControls();
+    try {
+      let connected = isOpen(localSocket);
+      if (!connected && isConnecting(localSocket)) {
+        const pendingSocket = localSocket;
+        ui.setStatus(forwardingStatus, "Waiting for local connection…", "connecting");
+        try {
+          await ui.waitForOpen(pendingSocket, "Mission Planner");
+          connected = localSocket === pendingSocket && isOpen(pendingSocket);
+        } catch (_error) {
+          connected = false;
+        }
+      }
+      if (!connected) {
+        connected = await connectLocal();
+      }
+      if (!connected) {
+        ui.setStatus(forwardingStatus, "Off — local connection failed", "error");
+        return;
+      }
+      await startForwarding();
+    } finally {
+      connectForwardPending = false;
+      renderControls();
     }
   }
 
@@ -295,12 +335,12 @@
     connectLocal();
   });
   disconnectLocalButton.addEventListener("click", () => disconnectLocal(true));
-  startForwardingButton.addEventListener("click", startForwarding);
+  connectForwardButton.addEventListener("click", connectAndForward);
   stopForwardingButton.addEventListener("click", () => stopForwarding(true));
   window.addEventListener("beforeunload", () => disconnectLocal(false));
 
   dashboard.reset();
   renderControls();
-  globalThis.setTimeout(() => connectLocal({ automatic: true }), 0);
+  connectLocal({ automatic: true });
   log.info("Mole page ready. Starting local-only Mission Planner auto-connect.");
 })();

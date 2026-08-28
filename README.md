@@ -33,7 +33,8 @@ Navigateur Digger
 - la carte charge automatiquement le fond satellite Esri World Imagery utilisé par le GNSS dashboard, sans clé ni configuration ;
 - la page Mole tente automatiquement la connexion Mission Planner à son ouverture, sans activer le forwarding ;
 - la connexion locale et le forwarding sont indépendants : arrêter ou perdre le relais ne coupe pas le dashboard Mole ;
-- les dashboards Mole et Digger proposent aussi GNSS (POS/GPS1/GPS2), Misc (IMU, airspeed et courant) et température ESC avec historique et prévision ;
+- les dashboards Mole et Digger proposent aussi GNSS (positions et caps POS/GPS1/GPS2), Misc (IMU, airspeed et courant) et température ESC avec historique et prévision ;
+- ces trois dashboards avancés sont masqués par défaut et s’activent à la demande depuis **Customize widgets** ;
 - les compteurs de transport et le dernier paquet brut restent disponibles dans les diagnostics.
 
 Pour lancer le serveur et capturer automatiquement les vues desktop/mobile avec Edge headless :
@@ -57,7 +58,7 @@ npm start
 Ouvrir ensuite :
 
 - `http://localhost:3000/dig` dans le navigateur Digger et cliquer sur **Connect** ;
-- `http://localhost:3000/mole` sur le PC de Mission Planner. La page tente la connexion locale automatiquement ; cliquer sur **Start forwarding** uniquement pour publier le flux.
+- `http://localhost:3000/mole` sur le PC de Mission Planner. La page tente la connexion locale automatiquement ; **Connect + forward** permet aussi de connecter et publier en un seul clic.
 
 L’état technique du service est disponible sur `http://localhost:3000/healthz`.
 
@@ -83,7 +84,7 @@ Entrer `ws://127.0.0.1:5863` sur la page Mole. Cette source envoie une télémé
 2. Ouvrir les outils de développement du navigateur avec F12, onglet **Console**.
 3. Ouvrir la page Digger et cliquer sur **Connect**.
 4. Ouvrir la page Mole sur le PC qui exécute Mission Planner : elle tente automatiquement `ws://127.0.0.1:56781/websocket/raw` en mode local uniquement.
-5. Vérifier que les widgets Mole reçoivent la télémétrie, puis cliquer sur **Start forwarding**.
+5. Vérifier que les widgets Mole reçoivent la télémétrie, puis cliquer sur **Connect + forward** (le même bouton fonctionne aussi directement si la connexion locale n’est pas encore établie).
 6. Vérifier que le relais et le Digger sont verts et que les compteurs des deux pages augmentent.
 
 Le code actuel de Mission Planner expose son flux WebSocket brut sur le port `56781`, au chemin `/websocket/raw` ([source Mission Planner](https://github.com/ArduPilot/MissionPlanner/blob/master/Utilities/httpserver.cs)). Si ton installation ou un plugin expose déjà `ws://127.0.0.1:5863`, remplace simplement l’URL dans le champ : elle n’est pas codée en dur.

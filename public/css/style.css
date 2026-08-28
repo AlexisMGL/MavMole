@@ -1487,13 +1487,26 @@ pre {
 }
 
 .gnss-marker-symbol {
-  display: block;
-  width: 18px;
-  height: 18px;
-  border: 3px solid #fff;
-  border-radius: 50%;
-  background: var(--gnss-source);
-  box-shadow: 0 2px 7px rgba(10, 21, 15, 0.48);
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  filter: drop-shadow(0 2px 3px rgba(10, 21, 15, 0.58));
+  transform-origin: center;
+  transition: transform 120ms linear;
+}
+
+.gnss-marker-symbol svg {
+  width: 21px;
+  height: 21px;
+  overflow: visible;
+}
+
+.gnss-marker-symbol path {
+  fill: var(--gnss-source);
+  stroke: #fff;
+  stroke-linejoin: round;
+  stroke-width: 2;
 }
 
 .gnss-map-legend {
@@ -1526,17 +1539,20 @@ pre {
 }
 
 .gnss-map-legend [data-source="pos"]::before,
-.gnss-source-card[data-source="pos"] {
+.gnss-source-card[data-source="pos"],
+.gnss-course-grid [data-source="pos"] {
   --source-colour: #3478c7;
 }
 
 .gnss-map-legend [data-source="gps1"]::before,
-.gnss-source-card[data-source="gps1"] {
+.gnss-source-card[data-source="gps1"],
+.gnss-course-grid [data-source="gps1"] {
   --source-colour: #e57b25;
 }
 
 .gnss-map-legend [data-source="gps2"]::before,
-.gnss-source-card[data-source="gps2"] {
+.gnss-source-card[data-source="gps2"],
+.gnss-course-grid [data-source="gps2"] {
   --source-colour: #2e9b68;
 }
 
@@ -1607,6 +1623,67 @@ pre {
   font-size: 0.7rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.gnss-course-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.gnss-course-grid > div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.gnss-course-grid p {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin: 0;
+}
+
+.gnss-course-grid small {
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-size: 0.53rem;
+  font-weight: 740;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.gnss-course-grid strong {
+  color: var(--source-colour);
+  font-size: 0.82rem;
+}
+
+.gnss-course-arrow {
+  display: grid;
+  flex: 0 0 27px;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--source-colour) 35%, var(--line));
+  border-radius: 50%;
+  color: var(--source-colour);
+  background: color-mix(in srgb, var(--source-colour) 8%, var(--surface));
+  font-size: 1rem;
+  font-weight: 850;
+  line-height: 1;
+  transform-origin: center;
+  transition: transform 120ms linear;
+}
+
+.gnss-course-arrow[data-state="waiting"] {
+  opacity: 0.35;
 }
 
 .gnss-offsets,

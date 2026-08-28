@@ -4,22 +4,24 @@
   const STORAGE_KEY = "mavmole.dashboard.v1";
   const ESRI_SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const PROFILE_FORMAT = "mavmole-dashboard";
-  const PROFILE_VERSION = 3;
+  const PROFILE_VERSION = 4;
+  const SETTINGS_VERSION = 2;
   const CUSTOM_WIDGET_TYPES = new Set(["value", "chart", "gauge"]);
   const MAX_CUSTOM_WIDGETS = 32;
   const MAX_HISTORY_POINTS = 240;
   const WIDGETS = Object.freeze([
-    { id: "position", label: "Position" },
-    { id: "airspeed", label: "Airspeed" },
-    { id: "agl", label: "AGL altitude" },
-    { id: "battery", label: "Battery" },
-    { id: "gnss", label: "GNSS dashboard" },
-    { id: "misc", label: "Misc dashboard" },
-    { id: "temperature", label: "ESC temperature" },
+    { id: "position", label: "Position", defaultVisible: true },
+    { id: "airspeed", label: "Airspeed", defaultVisible: true },
+    { id: "agl", label: "AGL altitude", defaultVisible: true },
+    { id: "battery", label: "Battery", defaultVisible: true },
+    { id: "gnss", label: "GNSS dashboard", defaultVisible: false },
+    { id: "misc", label: "Misc dashboard", defaultVisible: false },
+    { id: "temperature", label: "ESC temperature", defaultVisible: false },
   ]);
   const DEFAULT_SETTINGS = Object.freeze({
+    settingsVersion: SETTINGS_VERSION,
     order: WIDGETS.map((widget) => widget.id),
-    visible: Object.fromEntries(WIDGETS.map((widget) => [widget.id, true])),
+    visible: Object.fromEntries(WIDGETS.map((widget) => [widget.id, widget.defaultVisible])),
     speedUnit: "mps",
     altitudeUnit: "m",
     layout: "balanced",
@@ -102,9 +104,14 @@
       }
       customIds.add(widget.id);
     }
-    const visible = Object.fromEntries(
-      WIDGETS.map((widget) => [widget.id, saved.visible?.[widget.id] !== false]),
-    );
+    const savedSettingsVersion = Number(saved.settingsVersion) || 1;
+    const visible = Object.fromEntries(WIDGETS.map((widget) => {
+      const hasSavedValue = Object.prototype.hasOwnProperty.call(saved.visible || {}, widget.id);
+      if (savedSettingsVersion < SETTINGS_VERSION && !widget.defaultVisible) {
+        return [widget.id, false];
+      }
+      return [widget.id, hasSavedValue ? saved.visible[widget.id] !== false : widget.defaultVisible];
+    }));
     return {
       ...cloneDefaults(),
       order: [...savedOrder, ...missingIds],
@@ -343,6 +350,10 @@
     return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
   }
 
+  function normalizeCourse(course) {
+    return Number.isFinite(course) ? ((course % 360) + 360) % 360 : null;
+  }
+
   function messageMatches(decoded, messageId, messageName) {
     return decoded.messageId === messageId || decoded.messageName === messageName;
   }
@@ -463,7 +474,7 @@
       const config = this.sources[key];
       const icon = global.L.divIcon({
         className: "gnss-map-marker",
-        html: `<span class="gnss-marker-symbol" style="--gnss-source:${config.color}" aria-hidden="true"></span>`,
+        html: `<span class="gnss-marker-symbol" style="--gnss-source:${config.color}" aria-hidden="true"><svg viewBox="0 0 20 20"><path d="M10 1 L17 19 L10 15 L3 19 Z"></path></svg></span>`,
         iconSize: [22, 22],
         iconAnchor: [11, 11],
       });
@@ -486,6 +497,10 @@
         marker.setLatLng(position);
       } else {
         this.createMarker(key, source, position);
+      }
+      const symbol = this.markers.get(key)?.getElement()?.querySelector(".gnss-marker-symbol");
+      if (symbol) {
+        symbol.style.transform = `rotate(${Number.isFinite(source.course) ? source.course : 0}deg)`;
       }
       this.trails.get(key)?.setLatLngs(source.trail.map((point) => [point.lat, point.lon]));
       this.emptyElement.hidden = true;
@@ -579,6 +594,12 @@
         gnssGps2: document.querySelector("#gnss-gps2-readout"),
         gnssGps1Status: document.querySelector("#gnss-gps1-status"),
         gnssGps2Status: document.querySelector("#gnss-gps2-status"),
+        gnssPosCourse: document.querySelector("#gnss-pos-course"),
+        gnssGps1Course: document.querySelector("#gnss-gps1-course"),
+        gnssGps2Course: document.querySelector("#gnss-gps2-course"),
+        gnssPosCourseArrow: document.querySelector("#gnss-pos-course-arrow"),
+        gnssGps1CourseArrow: document.querySelector("#gnss-gps1-course-arrow"),
+        gnssGps2CourseArrow: document.querySelector("#gnss-gps2-course-arrow"),
         gnssDrift: document.querySelector("#gnss-drift-value"),
         gnssPosOffset: document.querySelector("#gnss-position-offset"),
         gnssSatCurrent: document.querySelector("#gnss-sat-current"),
@@ -780,9 +801,19 @@
       const eph = Number(fields.eph);
       source.hdop = Number.isFinite(eph) && eph !== 65535 ? eph / 100 : null;
       source.altitude = Number.isFinite(Number(fields.alt)) ? Number(fields.alt) / 1000 : null;
-      source.course = key === "pos"
-        ? (Number(fields.hdg) === 65535 ? null : Number(fields.hdg) / 100)
-        : (Number(fields.cog) === 65535 ? null : Number(fields.cog) / 100);
+      if (key === "pos") {
+        const vx = Number(fields.vx);
+        const vy = Number(fields.vy);
+        if (Number.isFinite(vx) && Number.isFinite(vy) && Math.hypot(vx, vy) > 1) {
+          source.course = normalizeCourse(Math.atan2(vy, vx) * 180 / Math.PI);
+        } else {
+          const heading = Number(fields.hdg);
+          source.course = heading === 65535 ? null : normalizeCourse(heading / 100);
+        }
+      } else {
+        const courseOverGround = Number(fields.cog);
+        source.course = courseOverGround === 65535 ? null : normalizeCourse(courseOverGround / 100);
+      }
 
       if (validCoordinates(lat, lon) && !(lat === 0 && lon === 0)) {
         source.lat = lat;
@@ -914,6 +945,21 @@
       renderSource("pos", this.elements.gnssPos, null);
       renderSource("gps1", this.elements.gnssGps1, this.elements.gnssGps1Status);
       renderSource("gps2", this.elements.gnssGps2, this.elements.gnssGps2Status);
+
+      const renderCourse = (source, valueElement, arrowElement) => {
+        if (!Number.isFinite(source.course)) {
+          valueElement.textContent = "—";
+          arrowElement.dataset.state = "waiting";
+          arrowElement.style.transform = "rotate(0deg)";
+          return;
+        }
+        valueElement.textContent = `${source.course.toFixed(1)}°`;
+        arrowElement.dataset.state = "live";
+        arrowElement.style.transform = `rotate(${source.course}deg)`;
+      };
+      renderCourse(this.gnssState.pos, this.elements.gnssPosCourse, this.elements.gnssPosCourseArrow);
+      renderCourse(this.gnssState.gps1, this.elements.gnssGps1Course, this.elements.gnssGps1CourseArrow);
+      renderCourse(this.gnssState.gps2, this.elements.gnssGps2Course, this.elements.gnssGps2CourseArrow);
 
       const gps1 = this.gnssState.gps1;
       const gps2 = this.gnssState.gps2;

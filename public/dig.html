@@ -204,6 +204,11 @@
                   <div><strong>GPS2</strong><span id="gnss-gps2-status" data-state="waiting">No data</span></div>
                   <p id="gnss-gps2-readout">Waiting for position</p>
                 </div>
+                <div class="gnss-course-grid" aria-label="GNSS course indications">
+                  <div data-source="pos"><span id="gnss-pos-course-arrow" class="gnss-course-arrow" data-state="waiting" aria-hidden="true">↑</span><p><small>POS course</small><strong id="gnss-pos-course">—</strong></p></div>
+                  <div data-source="gps1"><span id="gnss-gps1-course-arrow" class="gnss-course-arrow" data-state="waiting" aria-hidden="true">↑</span><p><small>GPS1 COG</small><strong id="gnss-gps1-course">—</strong></p></div>
+                  <div data-source="gps2"><span id="gnss-gps2-course-arrow" class="gnss-course-arrow" data-state="waiting" aria-hidden="true">↑</span><p><small>GPS2 COG</small><strong id="gnss-gps2-course">—</strong></p></div>
+                </div>
                 <dl class="gnss-offsets">
                   <div><dt>GPS1 ↔ GPS2 drift</dt><dd id="gnss-drift-value">—</dd></div>
                   <div><dt>POS ↔ GPS1 offset</dt><dd id="gnss-position-offset">—</dd></div>
