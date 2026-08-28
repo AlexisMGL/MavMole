@@ -41,16 +41,26 @@
             <p class="eyebrow">Get started</p>
             <h2 id="choose-role-title">Choose your side of the tunnel</h2>
           </div>
-          <p>Publish a local stream or open a viewer. No account is required.</p>
+          <p>Create a tunnel, join an existing fleet as another Mole, or open a viewer.</p>
         </div>
 
         <div class="role-grid">
-          <a class="role-card" href="/mole">
+          <a class="role-card" href="/mole?mode=create">
             <img class="role-icon" src="/assets/icons/mole-circle.png" alt="">
             <div class="role-card-copy">
-              <span class="role-badge">Publisher</span>
-              <h3>Be a Mole</h3>
-              <p>Auto-connect Mission Planner, inspect local widgets and forward only when you choose.</p>
+              <span class="role-badge">Create</span>
+              <h3>Create a tunnel</h3>
+              <p>Start a public demo stream or protect a named stream with a password.</p>
+            </div>
+            <span class="card-arrow" aria-hidden="true">→</span>
+          </a>
+
+          <a class="role-card" href="/mole?mode=join">
+            <img class="role-icon" src="/assets/icons/mole-circle.png" alt="">
+            <div class="role-card-copy">
+              <span class="role-badge">Fleet publisher</span>
+              <h3>Join as a Mole</h3>
+              <p>Add another Mission Planner MAVLink source to an existing tunnel.</p>
             </div>
             <span class="card-arrow" aria-hidden="true">→</span>
           </a>
@@ -69,23 +79,25 @@
 
       <section class="service-facts" aria-label="Service details">
         <div>
-          <strong>Direct</strong>
-          <span>One Mole, one Digger</span>
+          <strong id="home-stream-count">0</strong>
+          <span>Active streams</span>
         </div>
         <div>
-          <strong>Private by design</strong>
-          <span>Nothing is stored</span>
+          <strong id="home-viewer-count">0</strong>
+          <span>Connected viewers</span>
         </div>
         <div>
-          <strong>Transparent</strong>
-          <span>Frames stay untouched</span>
+          <strong>Encrypted</strong>
+          <span>TLS transport in production</span>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <span>MavMole prototype</span>
-      <span>Raw WebSocket transport · Local telemetry decoding</span>
+      <span>MavMole demo</span>
+      <span>Ephemeral tunnels · Nothing stored</span>
     </footer>
+    <script src="/js/app.js"></script>
+    <script src="/js/home.js"></script>
   </body>
 </html>

@@ -7,9 +7,16 @@ const ROLE = Object.freeze({
 
 const VALID_ROLES = new Set(Object.values(ROLE));
 
-const CLOSE_CODE = Object.freeze({
-  SHUTDOWN: 1001,
-  REPLACED: 4001,
+const JOIN_MODE = Object.freeze({
+  CREATE: "create",
+  JOIN: "join",
 });
 
-module.exports = { ROLE, VALID_ROLES, CLOSE_CODE };
+const CLOSE_CODE = Object.freeze({
+  SHUTDOWN: 1001,
+  AUTHENTICATION_REQUIRED: 4003,
+  INVALID_TUNNEL: 4004,
+  RATE_LIMITED: 4008,
+});
+
+module.exports = { ROLE, VALID_ROLES, JOIN_MODE, CLOSE_CODE };

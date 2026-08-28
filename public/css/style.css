@@ -212,7 +212,7 @@ input {
 
 .role-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 18px;
 }
 
@@ -575,6 +575,68 @@ input:disabled {
   line-height: 1.45;
 }
 
+.tunnel-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.tunnel-fields label,
+.tunnel-connect-form label {
+  margin: 0;
+}
+
+.tunnel-fields input,
+.tunnel-fields select,
+.tunnel-connect-form input {
+  width: 100%;
+  min-height: 42px;
+  margin-top: 6px;
+  padding: 9px 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  outline: 0;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.tunnel-fields input:focus,
+.tunnel-fields select:focus,
+.tunnel-connect-form input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(184, 98, 56, 0.12);
+}
+
+.tunnel-fields .checkbox-field {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--canvas);
+}
+
+.tunnel-fields .checkbox-field input {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+}
+
+.tunnel-fields .checkbox-field span {
+  color: var(--ink);
+  font-size: 0.72rem;
+}
+
+.tunnel-fields :disabled {
+  color: var(--ink-soft);
+  background: var(--surface-soft);
+}
+
 .mole-local-dashboard {
   margin-top: 22px;
 }
@@ -835,6 +897,7 @@ pre {
   border-radius: 14px;
   background: var(--surface);
   box-shadow: var(--shadow);
+  flex-wrap: wrap;
 }
 
 .connection-states,
@@ -845,7 +908,11 @@ pre {
 }
 
 .connection-states {
+  width: 100%;
   gap: 32px;
+  flex-wrap: wrap;
+  padding-bottom: 15px;
+  border-bottom: 1px solid var(--line);
 }
 
 .connection-states > div {
@@ -898,9 +965,18 @@ pre {
   font-weight: 760;
 }
 
-.toolbar-actions button {
+.toolbar-actions button,
+.tunnel-connect-form button {
   min-height: 39px;
   padding-block: 8px;
+}
+
+.tunnel-connect-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto auto;
+  gap: 12px;
+  width: 100%;
+  align-items: end;
 }
 
 .flight-dashboard {
@@ -917,6 +993,15 @@ pre {
 
 .dashboard-heading h2 {
   margin-bottom: 0;
+}
+
+.dashboard-heading h2 small {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  font-weight: 680;
+  letter-spacing: 0;
 }
 
 .telemetry-freshness {
@@ -2028,6 +2113,212 @@ pre {
   grid-column: 1 / -1;
 }
 
+.fleet-overview {
+  margin-bottom: 28px;
+  padding: clamp(20px, 3vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.fleet-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 0.3fr);
+  gap: 16px;
+}
+
+.fleet-map-shell {
+  position: relative;
+  min-height: 480px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #e8ece5;
+}
+
+.fleet-map {
+  position: absolute;
+  inset: 0;
+}
+
+.fleet-marker {
+  border: 0;
+  background: transparent;
+}
+
+.fleet-marker-symbol {
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  filter: drop-shadow(0 2px 4px rgba(10, 21, 15, 0.55));
+  transform-origin: center;
+  transition: transform 120ms linear;
+}
+
+.fleet-marker-symbol svg {
+  width: 25px;
+  height: 25px;
+  overflow: visible;
+}
+
+.fleet-marker-symbol path {
+  fill: var(--fleet-colour);
+  stroke: #fff;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.fleet-sources {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--canvas);
+}
+
+.fleet-sources > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.fleet-sources strong {
+  font-size: 0.82rem;
+}
+
+.fleet-sources span {
+  color: var(--ink-soft);
+  font-size: 0.67rem;
+  line-height: 1.45;
+}
+
+.fleet-source-list {
+  display: grid;
+  gap: 8px;
+}
+
+.fleet-source-empty {
+  margin: 4px 0 0;
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+}
+
+.fleet-source-button {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 9px;
+  min-height: 0;
+  padding: 10px;
+  border-color: var(--line);
+  color: var(--ink);
+  background: var(--surface);
+  text-align: left;
+}
+
+.fleet-source-button::before {
+  width: 9px;
+  height: 9px;
+  margin-top: 3px;
+  border-radius: 50%;
+  background: var(--fleet-colour);
+  content: "";
+}
+
+.fleet-source-button > span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.fleet-source-button strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fleet-source-button small {
+  color: var(--ink-soft);
+  font-size: 0.6rem;
+}
+
+.fleet-source-button[aria-pressed="true"] {
+  border-color: var(--fleet-colour);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--fleet-colour) 14%, transparent);
+}
+
+.fleet-source-button[data-state="offline"] {
+  opacity: 0.55;
+}
+
+.mole-notifications {
+  position: fixed;
+  z-index: 1200;
+  top: 24px;
+  right: max(24px, calc((100vw - 1120px) / 2));
+  display: grid;
+  gap: 10px;
+  width: min(calc(100vw - 32px), 370px);
+  pointer-events: none;
+}
+
+.mole-notice {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 15px 14px 15px 16px;
+  border: 1px solid color-mix(in srgb, var(--success) 35%, var(--line));
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 14px 40px rgba(24, 25, 22, 0.16);
+  pointer-events: auto;
+  animation: notice-enter 180ms ease-out;
+  transition: opacity 350ms ease, transform 350ms ease;
+}
+
+.mole-notice > div {
+  display: grid;
+  gap: 3px;
+}
+
+.mole-notice strong {
+  color: var(--success);
+  font-size: 0.78rem;
+}
+
+.mole-notice span {
+  color: var(--ink-soft);
+  font-size: 0.69rem;
+}
+
+.mole-notice-close {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-color: var(--line);
+  border-radius: 8px;
+  color: var(--ink-soft);
+  background: var(--surface);
+}
+
+.mole-notice.is-leaving {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+@keyframes notice-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
 .raw-diagnostics {
   overflow: hidden;
   border: 1px solid var(--line);
@@ -2414,6 +2705,14 @@ button.close-button {
     grid-row: auto;
     min-height: 520px;
   }
+
+  .fleet-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .fleet-map-shell {
+    min-height: 400px;
+  }
 }
 
 @media (max-width: 700px) {
@@ -2479,8 +2778,13 @@ button.close-button {
     margin-bottom: 38px;
   }
 
-  .toolbar-actions {
+  .toolbar-actions,
+  .tunnel-connect-form {
     width: 100%;
+  }
+
+  .tunnel-connect-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .telemetry-dashboard,
@@ -2600,8 +2904,27 @@ button.close-button {
     flex-direction: column;
   }
 
-  .toolbar-actions button {
+  .tunnel-fields,
+  .tunnel-connect-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tunnel-fields .checkbox-field {
+    grid-column: 1;
+  }
+
+  .toolbar-actions button,
+  .tunnel-connect-form button {
     width: 100%;
+  }
+
+  .fleet-map-shell {
+    min-height: 310px;
+  }
+
+  .mole-notifications {
+    top: 12px;
+    right: 16px;
   }
 
   .dashboard-heading {

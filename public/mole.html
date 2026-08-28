@@ -36,8 +36,8 @@
       <aside class="notice" aria-label="Browser permission notice">
         <span class="notice-icon" aria-hidden="true">i</span>
         <div>
-          <strong>Keep the browser console open while testing.</strong>
-          <p>Press F12 → Console before connecting. Chrome may request local-network access on an HTTPS page.</p>
+          <strong>Mission Planner stays on your local network.</strong>
+          <p>Chrome may request local-network access when this HTTPS page connects to the Mission Planner WebSocket.</p>
         </div>
       </aside>
 
@@ -67,8 +67,28 @@
           <div class="forward-control">
             <div>
               <strong>Relay forwarding</strong>
-              <span>Optional. Your local dashboard keeps running when forwarding is stopped.</span>
+              <span>Choose a public demo tunnel or protect a named tunnel. Passwords are only sent over the relay connection and are never stored.</span>
             </div>
+            <div class="tunnel-fields">
+              <label for="tunnel-mode">Action
+                <select id="tunnel-mode">
+                  <option value="create">Create a tunnel</option>
+                  <option value="join">Join an existing tunnel</option>
+                </select>
+              </label>
+              <label for="stream-name">Stream name
+                <input id="stream-name" type="text" value="public" maxlength="48" list="public-stream-list" autocomplete="off" required>
+                <datalist id="public-stream-list"></datalist>
+              </label>
+              <label for="stream-password">Password
+                <input id="stream-password" type="password" maxlength="128" autocomplete="new-password" placeholder="Only for private streams">
+              </label>
+              <label id="private-stream-label" class="checkbox-field">
+                <input id="private-stream" type="checkbox">
+                <span>Hide and password-protect this stream</span>
+              </label>
+            </div>
+            <p id="tunnel-help" class="field-help">Public mode keeps the one-click demo behavior. Use a unique name to avoid mixing unrelated Moles.</p>
             <div class="actions">
               <button id="connect-forward-button" type="button">Connect + forward</button>
               <button id="stop-forwarding-button" class="secondary" type="button" disabled>Stop forwarding</button>
@@ -95,12 +115,24 @@
               <dd id="relay-status" class="status" data-state="idle" aria-live="polite">Not connected</dd>
             </div>
             <div>
+              <dt>Tunnel ID</dt>
+              <dd id="tunnel-id" class="viewer-count" title="Server-assigned ephemeral tunnel ID">—</dd>
+            </div>
+            <div>
               <dt>Forwarding</dt>
               <dd id="forwarding-status" class="status" data-state="idle" aria-live="polite">Off</dd>
             </div>
             <div>
               <dt>Stream viewers</dt>
               <dd id="viewer-count" class="viewer-count" aria-live="polite">0 viewers</dd>
+            </div>
+            <div>
+              <dt>Moles sharing data</dt>
+              <dd id="mole-count" class="viewer-count" aria-live="polite">0 active Moles</dd>
+            </div>
+            <div>
+              <dt>Service streams</dt>
+              <dd id="active-stream-count" class="viewer-count" aria-live="polite">0 streams</dd>
             </div>
           </dl>
 
@@ -113,6 +145,8 @@
           </dl>
         </section>
       </div>
+
+      <div id="mole-notifications" class="mole-notifications" aria-live="polite" aria-atomic="false"></div>
 
       <section class="flight-dashboard mole-local-dashboard" aria-labelledby="flight-dashboard-title">
         <div class="dashboard-heading">

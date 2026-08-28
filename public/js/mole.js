@@ -9,10 +9,20 @@
   const disconnectLocalButton = document.querySelector("#disconnect-local-button");
   const connectForwardButton = document.querySelector("#connect-forward-button");
   const stopForwardingButton = document.querySelector("#stop-forwarding-button");
+  const tunnelMode = document.querySelector("#tunnel-mode");
+  const streamName = document.querySelector("#stream-name");
+  const streamPassword = document.querySelector("#stream-password");
+  const privateStream = document.querySelector("#private-stream");
+  const privateStreamLabel = document.querySelector("#private-stream-label");
+  const tunnelHelp = document.querySelector("#tunnel-help");
   const localStatus = document.querySelector("#local-status");
   const relayStatus = document.querySelector("#relay-status");
   const forwardingStatus = document.querySelector("#forwarding-status");
   const viewerCount = document.querySelector("#viewer-count");
+  const moleCount = document.querySelector("#mole-count");
+  const activeStreamCount = document.querySelector("#active-stream-count");
+  const tunnelId = document.querySelector("#tunnel-id");
+  const notifications = document.querySelector("#mole-notifications");
   const forwardedCount = document.querySelector("#forwarded-count");
   const parser = new window.MavMoleTelemetry.MavlinkStreamParser();
   const decoder = new window.MavMoleTelemetry.TelemetryDecoder();
@@ -23,6 +33,7 @@
   let localAttempt = 0;
   let relayAttempt = 0;
   let forwardingRequested = false;
+  let relayAuthenticated = false;
   let connectForwardPending = false;
   let forwardedFrames = 0;
 
@@ -54,6 +65,35 @@
         ? "Connected + forwarding"
         : "Connect + forward";
     stopForwardingButton.disabled = !forwardingRequested && !relaySocket;
+    const tunnelLocked = connectForwardPending || Boolean(relaySocket);
+    tunnelMode.disabled = tunnelLocked;
+    streamName.disabled = tunnelLocked;
+    streamPassword.disabled = tunnelLocked;
+    privateStream.disabled = tunnelLocked || tunnelMode.value === "join";
+  }
+
+  function readTunnelConfig() {
+    return ui.validateTunnelConfig({
+      stream: streamName.value,
+      password: streamPassword.value,
+      private: privateStream.checked,
+      mode: tunnelMode.value,
+    }, "mole");
+  }
+
+  function syncTunnelMode() {
+    const joining = tunnelMode.value === "join";
+    if (joining) {
+      privateStream.checked = false;
+    }
+    privateStreamLabel.hidden = joining;
+    privateStream.disabled = joining || Boolean(relaySocket) || connectForwardPending;
+    streamPassword.required = !joining && privateStream.checked;
+    streamPassword.placeholder = joining ? "Required only for private tunnels" : "Only for private streams";
+    streamPassword.autocomplete = joining ? "current-password" : "new-password";
+    tunnelHelp.textContent = joining
+      ? "Use exactly the same stream name and password as the existing tunnel."
+      : "Public mode keeps the one-click demo behavior. Use a unique name to avoid mixing unrelated Moles.";
   }
 
   function closeSocket(socket, label) {
@@ -70,10 +110,14 @@
   function stopForwarding(updateStatuses = true) {
     relayAttempt += 1;
     forwardingRequested = false;
+    relayAuthenticated = false;
     const oldRelay = relaySocket;
     relaySocket = null;
     closeSocket(oldRelay, "MavMole relay");
     ui.renderViewerCount(viewerCount, 0);
+    ui.renderMoleCount(moleCount, 0);
+    tunnelId.textContent = "—";
+    tunnelId.removeAttribute("data-tunnel-id");
     if (updateStatuses) {
       ui.setStatus(relayStatus, "Not connected", "idle");
       ui.setStatus(forwardingStatus, "Off — local dashboard remains active", "idle");
@@ -116,8 +160,7 @@
     if (!forwardingRequested) {
       return;
     }
-    if (!isOpen(relaySocket)) {
-      stats.drop();
+    if (!isOpen(relaySocket) || !relayAuthenticated) {
       return;
     }
     relaySocket.send(data);
@@ -258,7 +301,16 @@
     if (!isOpen(localSocket) || forwardingRequested || relaySocket) {
       return;
     }
+    let tunnelConfig;
+    try {
+      tunnelConfig = readTunnelConfig();
+    } catch (error) {
+      ui.setStatus(relayStatus, error.message, "error");
+      ui.setStatus(forwardingStatus, "Off — invalid tunnel configuration", "error");
+      return;
+    }
     forwardingRequested = true;
+    relayAuthenticated = false;
     const attempt = ++relayAttempt;
     const relayUrl = ui.relayWebSocketUrl("mole");
     let socket;
@@ -284,8 +336,12 @@
         return;
       }
       const control = ui.parseRelayControl(event.data);
-      if (control) {
+      if (control?.type === "stream.presence") {
         ui.renderViewerCount(viewerCount, control.viewers);
+        ui.renderMoleCount(moleCount, control.moles);
+        ui.renderStreamCount(activeStreamCount, control.streams);
+      } else if (control?.type === "stream.mole_active") {
+        ui.showMoleNotice(notifications, control);
       }
     });
     socket.addEventListener("error", (event) => {
@@ -299,9 +355,13 @@
         return;
       }
       relaySocket = null;
+      relayAuthenticated = false;
       const wasRequested = forwardingRequested;
       forwardingRequested = false;
       ui.renderViewerCount(viewerCount, 0);
+      ui.renderMoleCount(moleCount, 0);
+      tunnelId.textContent = "—";
+      tunnelId.removeAttribute("data-tunnel-id");
       ui.setStatus(relayStatus, `Closed (code ${event.code})`, event.code === 1000 ? "idle" : "error");
       ui.setStatus(forwardingStatus, wasRequested ? "Off — relay closed" : "Off", wasRequested ? "error" : "idle");
       renderControls();
@@ -313,7 +373,19 @@
       if (attempt !== relayAttempt || relaySocket !== socket || !forwardingRequested) {
         return;
       }
-      ui.setStatus(relayStatus, "Connected", "connected");
+      const joined = await ui.authenticateTunnel(socket, tunnelConfig, "mole");
+      if (attempt !== relayAttempt || relaySocket !== socket || !forwardingRequested) {
+        return;
+      }
+      relayAuthenticated = true;
+      tunnelId.textContent = joined.tunnelId.slice(0, 8);
+      tunnelId.dataset.tunnelId = joined.tunnelId;
+      tunnelId.title = joined.tunnelId;
+      ui.setStatus(
+        relayStatus,
+        "Connected · " + joined.stream + (joined.secureTransport ? " · TLS" : " · local unencrypted transport"),
+        "connected",
+      );
       ui.setStatus(forwardingStatus, "Forwarding binary frames", "connected");
       renderControls();
       log.info("Relay forwarding is active.");
@@ -323,8 +395,10 @@
       }
       log.error("Could not start relay forwarding.", error);
       forwardingRequested = false;
+      relayAuthenticated = false;
       relaySocket = null;
       closeSocket(socket, "MavMole relay");
+      ui.setStatus(relayStatus, error.message, "error");
       ui.setStatus(forwardingStatus, "Off — relay connection failed", "error");
       renderControls();
     }
@@ -337,8 +411,30 @@
   disconnectLocalButton.addEventListener("click", () => disconnectLocal(true));
   connectForwardButton.addEventListener("click", connectAndForward);
   stopForwardingButton.addEventListener("click", () => stopForwarding(true));
+  tunnelMode.addEventListener("change", () => {
+    syncTunnelMode();
+    renderControls();
+  });
+  privateStream.addEventListener("change", () => {
+    streamPassword.required = privateStream.checked;
+  });
   window.addEventListener("beforeunload", () => disconnectLocal(false));
 
+  const requestedMode = new URLSearchParams(window.location.search).get("mode");
+  tunnelMode.value = requestedMode === "join" ? "join" : "create";
+  syncTunnelMode();
+  ui.loadPublicStreams().then((streams) => {
+    const list = document.querySelector("#public-stream-list");
+    list.replaceChildren(...streams.map((stream) => {
+      const option = document.createElement("option");
+      option.value = stream.name;
+      option.label = stream.moles + " active Moles · " + stream.viewers + " viewers";
+      return option;
+    }));
+  }).catch(() => {});
+  ui.loadServiceStats().then((serviceStats) => {
+    ui.renderStreamCount(activeStreamCount, serviceStats.streams);
+  }).catch(() => {});
   dashboard.reset();
   renderControls();
   connectLocal({ automatic: true });

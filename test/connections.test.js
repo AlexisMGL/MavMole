@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { ConnectionRegistry } = require("../server/websocket/connections");
-const { CLOSE_CODE, ROLE } = require("../server/websocket/constants");
+const { JOIN_MODE, ROLE } = require("../server/websocket/constants");
 
 const silentLogger = {
   debug() {},
@@ -21,42 +21,81 @@ function fakeSocket() {
   };
 }
 
-test("a newer Mole replaces the previous source", () => {
+test("multiple Moles can publish inside the same tunnel", async () => {
   const registry = new ConnectionRegistry(silentLogger);
   const firstMole = fakeSocket();
   const secondMole = fakeSocket();
 
-  registry.register(ROLE.MOLE, firstMole);
-  registry.register(ROLE.MOLE, secondMole);
+  const first = await registry.join(ROLE.MOLE, firstMole, {
+    name: "demo-fleet",
+    mode: JOIN_MODE.CREATE,
+  });
+  const second = await registry.join(ROLE.MOLE, secondMole, {
+    name: "demo-fleet",
+    mode: JOIN_MODE.JOIN,
+  });
 
-  assert.equal(registry.get(ROLE.MOLE), secondMole);
-  assert.deepEqual(firstMole.closes, [
-    { code: CLOSE_CODE.REPLACED, reason: "A new mole connected." },
-  ]);
+  assert.notEqual(first.sourceId, second.sourceId);
+  assert.deepEqual(registry.allInTunnel(firstMole, ROLE.MOLE), [firstMole, secondMole]);
+  assert.deepEqual(firstMole.closes, []);
+  assert.deepEqual(secondMole.closes, []);
+  assert.deepEqual(registry.snapshot(), { streams: 1, moles: 2, viewers: 0 });
 });
 
-test("multiple Diggers can watch the same stream", () => {
+test("private tunnels require the same password and stay out of public listings", async () => {
   const registry = new ConnectionRegistry(silentLogger);
-  const firstDigger = fakeSocket();
-  const secondDigger = fakeSocket();
+  const creator = fakeSocket();
+  await registry.join(ROLE.MOLE, creator, {
+    name: "private-flight",
+    password: "correct horse",
+    isPrivate: true,
+    mode: JOIN_MODE.CREATE,
+  });
 
-  registry.register(ROLE.DIGGER, firstDigger);
-  registry.register(ROLE.DIGGER, secondDigger);
+  await assert.rejects(
+    registry.join(ROLE.DIGGER, fakeSocket(), {
+      name: "private-flight",
+      password: "wrong password",
+    }),
+    /credentials are incorrect/,
+  );
+  const viewer = fakeSocket();
+  await registry.join(ROLE.DIGGER, viewer, {
+    name: "private-flight",
+    password: "correct horse",
+  });
 
-  assert.deepEqual(registry.all(ROLE.DIGGER), [firstDigger, secondDigger]);
-  assert.equal(registry.count(ROLE.DIGGER), 2);
-  assert.deepEqual(firstDigger.closes, []);
+  assert.deepEqual(registry.publicStreams(), []);
+  assert.equal(registry.presence(viewer).viewers, 1);
 });
 
-test("closing a replaced client does not remove its replacement", () => {
+test("tunnels isolate viewers and are removed when their last socket leaves", async () => {
   const registry = new ConnectionRegistry(silentLogger);
-  const firstMole = fakeSocket();
-  const secondMole = fakeSocket();
+  const alphaMole = fakeSocket();
+  const alphaViewer = fakeSocket();
+  const betaMole = fakeSocket();
 
-  registry.register(ROLE.MOLE, firstMole);
-  registry.register(ROLE.MOLE, secondMole);
+  await registry.join(ROLE.MOLE, alphaMole, { name: "alpha" });
+  await registry.join(ROLE.DIGGER, alphaViewer, { name: "alpha" });
+  await registry.join(ROLE.MOLE, betaMole, { name: "beta" });
 
-  assert.equal(registry.remove(ROLE.MOLE, firstMole), false);
-  assert.equal(registry.get(ROLE.MOLE), secondMole);
-  assert.deepEqual(registry.snapshot(), { mole: true, digger: false, viewers: 0 });
+  assert.deepEqual(registry.allInTunnel(alphaMole, ROLE.DIGGER), [alphaViewer]);
+  assert.deepEqual(registry.allInTunnel(betaMole, ROLE.DIGGER), []);
+  registry.remove(alphaViewer);
+  registry.remove(alphaMole);
+  assert.deepEqual(registry.snapshot(), { streams: 1, moles: 1, viewers: 0 });
+});
+
+test("only Moles proven to carry MAVLink count as active", async () => {
+  const registry = new ConnectionRegistry(silentLogger);
+  const mole = fakeSocket();
+  const viewer = fakeSocket();
+  await registry.join(ROLE.MOLE, mole, { name: "activity" });
+  await registry.join(ROLE.DIGGER, viewer, { name: "activity" });
+
+  assert.equal(registry.presence(viewer).moles, 0);
+  const active = registry.markMoleActive(mole);
+  assert.equal(active.sourceId, registry.metadata(mole).sourceId);
+  assert.equal(registry.presence(viewer).moles, 1);
+  assert.equal(registry.markMoleActive(mole), null);
 });

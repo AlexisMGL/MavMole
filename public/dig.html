@@ -47,10 +47,54 @@
             <span class="connection-label">Viewers</span>
             <span id="viewer-count" class="viewer-count" aria-live="polite">0 viewers</span>
           </div>
+          <div>
+            <span class="connection-label">Moles</span>
+            <span id="mole-count" class="viewer-count" aria-live="polite">0 active Moles</span>
+          </div>
+          <div>
+            <span class="connection-label">Service</span>
+            <span id="active-stream-count" class="viewer-count" aria-live="polite">0 streams</span>
+          </div>
+          <div>
+            <span class="connection-label">Tunnel ID</span>
+            <span id="tunnel-id" class="viewer-count" title="Server-assigned ephemeral tunnel ID">Not joined</span>
+          </div>
         </div>
-        <div class="toolbar-actions">
-          <button id="connect-button" type="button">Connect to tunnel</button>
+        <form id="digger-tunnel-form" class="tunnel-connect-form">
+          <label>Stream name
+            <input id="stream-name" type="text" value="public" maxlength="48" list="public-stream-list" autocomplete="off" required>
+            <datalist id="public-stream-list"></datalist>
+          </label>
+          <label>Password
+            <input id="stream-password" type="password" maxlength="128" autocomplete="current-password" placeholder="Leave empty for public">
+          </label>
+          <button id="connect-button" type="submit">Connect to tunnel</button>
           <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
+        </form>
+      </section>
+
+      <div id="mole-notifications" class="mole-notifications" aria-live="polite" aria-atomic="false"></div>
+
+      <section class="fleet-overview" aria-labelledby="fleet-overview-title">
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">Three-minute live history</p>
+            <h2 id="fleet-overview-title">Mole network map</h2>
+          </div>
+          <span id="fleet-status" class="telemetry-freshness" data-state="waiting">Connect to a tunnel</span>
+        </div>
+        <div class="fleet-layout">
+          <div class="fleet-map-shell">
+            <div id="fleet-map" class="fleet-map" aria-label="Map of all active Moles"></div>
+            <div id="fleet-map-empty" class="widget-empty">Waiting for Mole positions</div>
+          </div>
+          <div class="fleet-sources">
+            <div>
+              <strong>Sources</strong>
+              <span>Choose which Mole feeds the detailed dashboard.</span>
+            </div>
+            <div id="fleet-source-list" class="fleet-source-list"></div>
+          </div>
         </div>
       </section>
 
@@ -58,7 +102,7 @@
         <div class="dashboard-heading">
           <div>
             <p class="eyebrow">Aircraft overview</p>
-            <h2 id="flight-dashboard-title">Molehill dashboard</h2>
+            <h2 id="flight-dashboard-title">Molehill dashboard <small id="active-mole-label">No Mole selected</small></h2>
           </div>
           <span id="telemetry-freshness" class="telemetry-freshness" data-state="waiting">Waiting for MAVLink</span>
         </div>

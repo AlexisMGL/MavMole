@@ -2,6 +2,7 @@
 
 const WebSocket = require("ws");
 const { ROLE } = require("./constants");
+const { encodeRelayFrame } = require("./protocol");
 const { createLogger } = require("../utils/logger");
 
 class BinaryRelay {
@@ -13,45 +14,35 @@ class BinaryRelay {
     this.framesDropped = 0;
   }
 
-  forward(role, data, isBinary) {
-    if (role !== ROLE.MOLE) {
-      this.logger.warn(`Ignoring a frame sent by ${role}; V1 is Mole to Digger only.`);
+  forward(socket, data, isBinary) {
+    const source = this.connections.metadata(socket);
+    if (!source || source.role !== ROLE.MOLE) {
+      this.logger.warn("Ignoring a frame from an unauthenticated or non-Mole connection.");
       return false;
     }
-
     if (!isBinary) {
-      this.logger.warn("Ignoring a non-binary frame from the Mole.");
       this.framesDropped += 1;
       return false;
     }
 
     const diggers = this.connections
-      .all(ROLE.DIGGER)
+      .allInTunnel(socket, ROLE.DIGGER)
       .filter((digger) => digger.readyState === WebSocket.OPEN);
-
     if (diggers.length === 0) {
       this.framesDropped += 1;
-      this.logger.debug("Dropping a Mole frame because no viewer is connected.", {
-        bytes: data.length,
-      });
       return false;
     }
 
+    const envelope = encodeRelayFrame(source.sourceId, data);
     for (const digger of diggers) {
-      digger.send(data, { binary: true }, (error) => {
+      digger.send(envelope, { binary: true }, (error) => {
         if (error) {
           this.logger.error("Failed to forward a binary frame.", error);
         }
       });
     }
-
     this.framesForwarded += 1;
     this.bytesForwarded += data.length * diggers.length;
-    this.logger.debug("Forwarded a binary frame.", {
-      bytes: data.length,
-      frame: this.framesForwarded,
-      viewers: diggers.length,
-    });
     return true;
   }
 
