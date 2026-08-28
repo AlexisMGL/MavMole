@@ -5,14 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="View live MAVLink flight telemetry from a MavMole relay.">
     <title>Molehill Telemetry — MavMole</title>
-    <link rel="icon" href="/assets/icons/molehill.png" type="image/png">
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="/css/style.css">
   </head>
   <body class="tool-page digger-page">
     <header class="app-header">
       <a class="brand" href="/" aria-label="MavMole home">
-        <img src="/assets/icons/mole-small.png" alt="">
+        <span class="brand-mark" aria-hidden="true">M</span>
         <span>MavMole</span>
       </a>
       <nav aria-label="Primary navigation">
@@ -171,6 +171,136 @@
               <div id="battery-bar" class="battery-bar"></div>
             </div>
             <p id="battery-source" class="widget-source">No battery message</p>
+          </article>
+
+          <article class="telemetry-widget advanced-dashboard-widget gnss-widget" data-widget="gnss">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Navigation integrity</span>
+                <h3>GNSS dashboard</h3>
+              </div>
+              <span class="widget-symbol" aria-hidden="true">GPS</span>
+            </header>
+            <div class="gnss-layout">
+              <div class="gnss-map-shell">
+                <div id="gnss-map" class="gnss-map" aria-label="GNSS satellite map"></div>
+                <div id="gnss-map-empty" class="widget-empty">Waiting for GNSS positions</div>
+                <div class="gnss-map-legend" aria-label="GNSS source colours">
+                  <span data-source="pos">POS</span>
+                  <span data-source="gps1">GPS1</span>
+                  <span data-source="gps2">GPS2</span>
+                </div>
+              </div>
+              <div class="gnss-details">
+                <div class="gnss-source-card" data-source="pos">
+                  <div><strong>POS</strong><span>GLOBAL_POSITION_INT</span></div>
+                  <p id="gnss-pos-readout">Waiting for position</p>
+                </div>
+                <div class="gnss-source-card" data-source="gps1">
+                  <div><strong>GPS1</strong><span id="gnss-gps1-status" data-state="waiting">No data</span></div>
+                  <p id="gnss-gps1-readout">Waiting for position</p>
+                </div>
+                <div class="gnss-source-card" data-source="gps2">
+                  <div><strong>GPS2</strong><span id="gnss-gps2-status" data-state="waiting">No data</span></div>
+                  <p id="gnss-gps2-readout">Waiting for position</p>
+                </div>
+                <dl class="gnss-offsets">
+                  <div><dt>GPS1 ↔ GPS2 drift</dt><dd id="gnss-drift-value">—</dd></div>
+                  <div><dt>POS ↔ GPS1 offset</dt><dd id="gnss-position-offset">—</dd></div>
+                </dl>
+                <div class="advanced-chart-block">
+                  <div class="advanced-chart-heading">
+                    <span>GPS2 satellite count · 60s</span>
+                    <strong id="gnss-sat-current">Waiting for GPS2</strong>
+                  </div>
+                  <svg class="advanced-line-chart gnss-sat-chart" viewBox="0 0 300 74" preserveAspectRatio="none" aria-label="GPS2 satellites over 60 seconds">
+                    <line id="gnss-sat-threshold" class="chart-threshold" x1="0" x2="300" y1="37" y2="37"></line>
+                    <polyline id="gnss-sat-line" class="advanced-chart-line" points=""></polyline>
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="telemetry-widget advanced-dashboard-widget misc-widget" data-widget="misc">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Threshold monitor</span>
+                <h3>Misc dashboard</h3>
+              </div>
+              <span class="widget-symbol" aria-hidden="true">60s</span>
+            </header>
+            <div class="misc-chart-grid">
+              <section class="misc-chart-card">
+                <header>
+                  <div><strong>IMU X load</strong><span id="misc-imu-status" data-state="waiting">Waiting for MAVLink</span></div>
+                  <output id="misc-imu-value">—</output>
+                </header>
+                <svg class="advanced-line-chart" viewBox="0 0 300 86" preserveAspectRatio="none" aria-label="IMU X load over 60 seconds">
+                  <line id="misc-imu-threshold-line" class="chart-threshold" x1="0" x2="300" y1="40" y2="40"></line>
+                  <polyline id="misc-imu-line" class="advanced-chart-line" points=""></polyline>
+                </svg>
+                <footer><label>Threshold <input id="misc-imu-threshold" type="number" min="0.1" max="20" step="0.1"> g</label><span id="misc-imu-longest">0.0 s longest</span></footer>
+              </section>
+              <section class="misc-chart-card">
+                <header>
+                  <div><strong>Airspeed</strong><span id="misc-airspeed-status" data-state="waiting">Waiting for MAVLink</span></div>
+                  <output id="misc-airspeed-value">—</output>
+                </header>
+                <svg class="advanced-line-chart" viewBox="0 0 300 86" preserveAspectRatio="none" aria-label="Airspeed over 60 seconds">
+                  <line id="misc-airspeed-threshold-line" class="chart-threshold" x1="0" x2="300" y1="40" y2="40"></line>
+                  <polyline id="misc-airspeed-line" class="advanced-chart-line" points=""></polyline>
+                </svg>
+                <footer><label>Threshold <input id="misc-airspeed-threshold" type="number" min="1" max="250" step="1"> m/s</label><span id="misc-airspeed-longest">0.0 s longest</span></footer>
+              </section>
+              <section class="misc-chart-card">
+                <header>
+                  <div><strong>Battery 0 current</strong><span id="misc-current-status" data-state="waiting">Waiting for MAVLink</span></div>
+                  <output id="misc-current-value">—</output>
+                </header>
+                <svg class="advanced-line-chart" viewBox="0 0 300 86" preserveAspectRatio="none" aria-label="Battery current over 60 seconds">
+                  <line id="misc-current-threshold-line" class="chart-threshold" x1="0" x2="300" y1="40" y2="40"></line>
+                  <polyline id="misc-current-line" class="advanced-chart-line" points=""></polyline>
+                </svg>
+                <footer><label>Threshold <input id="misc-current-threshold" type="number" min="1" max="1000" step="1"> A</label><span id="misc-current-longest">0.0 s longest</span></footer>
+              </section>
+            </div>
+          </article>
+
+          <article class="telemetry-widget advanced-dashboard-widget temperature-widget" data-widget="temperature">
+            <header class="widget-heading">
+              <div>
+                <span class="widget-kicker">Thermal trend</span>
+                <h3>ESC temperature</h3>
+              </div>
+              <span id="esc-status" class="advanced-status" data-state="waiting">Waiting for ESC_TELEMETRY_1_TO_4</span>
+            </header>
+            <div class="esc-value-grid">
+              <div id="esc-1-card" data-state="stale"><span>ESC 1</span><strong id="esc-1-value">—</strong></div>
+              <div id="esc-2-card" data-state="stale"><span>ESC 2</span><strong id="esc-2-value">—</strong></div>
+              <div id="esc-3-card" data-state="stale"><span>ESC 3</span><strong id="esc-3-value">—</strong></div>
+              <div id="esc-4-card" data-state="stale"><span>ESC 4</span><strong id="esc-4-value">—</strong></div>
+            </div>
+            <div class="esc-chart-wrap">
+              <svg class="advanced-line-chart esc-chart" viewBox="0 0 300 100" preserveAspectRatio="none" aria-label="ESC temperatures, 60 second history and 20 second forecast">
+                <rect class="esc-forecast-zone" x="225" y="0" width="75" height="100"></rect>
+                <line id="esc-warning-line" class="temperature-threshold warning" x1="0" x2="300" y1="50" y2="50"></line>
+                <line id="esc-critical-line" class="temperature-threshold critical" x1="0" x2="300" y1="20" y2="20"></line>
+                <polyline id="esc-1-line" class="esc-series esc-series-1" points=""></polyline>
+                <polyline id="esc-2-line" class="esc-series esc-series-2" points=""></polyline>
+                <polyline id="esc-3-line" class="esc-series esc-series-3" points=""></polyline>
+                <polyline id="esc-4-line" class="esc-series esc-series-4" points=""></polyline>
+                <line id="esc-1-forecast" class="esc-forecast esc-series-1" hidden></line>
+                <line id="esc-2-forecast" class="esc-forecast esc-series-2" hidden></line>
+                <line id="esc-3-forecast" class="esc-forecast esc-series-3" hidden></line>
+                <line id="esc-4-forecast" class="esc-forecast esc-series-4" hidden></line>
+              </svg>
+              <div class="esc-chart-labels"><span>60s ago</span><strong>Now</strong><span>+20s forecast</span></div>
+            </div>
+            <dl class="esc-summary">
+              <div><dt>Temperature spread</dt><dd id="esc-spread">—</dd></div>
+              <div><dt>Estimated time to 85 °C</dt><dd id="esc-shutdown">No rising trend</dd></div>
+            </dl>
           </article>
         </div>
       </section>

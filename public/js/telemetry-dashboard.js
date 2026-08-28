@@ -4,7 +4,7 @@
   const STORAGE_KEY = "mavmole.dashboard.v1";
   const ESRI_SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const PROFILE_FORMAT = "mavmole-dashboard";
-  const PROFILE_VERSION = 2;
+  const PROFILE_VERSION = 3;
   const CUSTOM_WIDGET_TYPES = new Set(["value", "chart", "gauge"]);
   const MAX_CUSTOM_WIDGETS = 32;
   const MAX_HISTORY_POINTS = 240;
@@ -13,6 +13,9 @@
     { id: "airspeed", label: "Airspeed" },
     { id: "agl", label: "AGL altitude" },
     { id: "battery", label: "Battery" },
+    { id: "gnss", label: "GNSS dashboard" },
+    { id: "misc", label: "Misc dashboard" },
+    { id: "temperature", label: "ESC temperature" },
   ]);
   const DEFAULT_SETTINGS = Object.freeze({
     order: WIDGETS.map((widget) => widget.id),
@@ -24,6 +27,11 @@
     trailPoints: 80,
     airspeedScaleMps: 50,
     altitudeScaleM: 150,
+    miscThresholds: {
+      imu: 1.2,
+      airspeed: 50,
+      current: 120,
+    },
     customWidgets: [],
   });
 
@@ -32,6 +40,7 @@
       ...DEFAULT_SETTINGS,
       order: [...DEFAULT_SETTINGS.order],
       visible: { ...DEFAULT_SETTINGS.visible },
+      miscThresholds: { ...DEFAULT_SETTINGS.miscThresholds },
       customWidgets: [],
     };
   }
@@ -107,13 +116,26 @@
       trailPoints: clamp(Number(saved.trailPoints) || DEFAULT_SETTINGS.trailPoints, 10, 250),
       airspeedScaleMps: clamp(Number(saved.airspeedScaleMps) || DEFAULT_SETTINGS.airspeedScaleMps, 5, 200),
       altitudeScaleM: clamp(Number(saved.altitudeScaleM) || DEFAULT_SETTINGS.altitudeScaleM, 10, 5000),
+      miscThresholds: {
+        imu: clamp(Number(saved.miscThresholds?.imu) || DEFAULT_SETTINGS.miscThresholds.imu, 0.1, 20),
+        airspeed: clamp(
+          Number(saved.miscThresholds?.airspeed) || DEFAULT_SETTINGS.miscThresholds.airspeed,
+          1,
+          250,
+        ),
+        current: clamp(
+          Number(saved.miscThresholds?.current) || DEFAULT_SETTINGS.miscThresholds.current,
+          1,
+          1000,
+        ),
+      },
       customWidgets,
     };
   }
 
-  function loadSettings() {
+  function loadSettings(storageKey = STORAGE_KEY) {
     try {
-      const saved = JSON.parse(global.localStorage.getItem(STORAGE_KEY));
+      const saved = JSON.parse(global.localStorage.getItem(storageKey));
       if (!saved || typeof saved !== "object") {
         return cloneDefaults();
       }
@@ -124,9 +146,9 @@
     }
   }
 
-  function saveSettings(settings) {
+  function saveSettings(settings, storageKey = STORAGE_KEY) {
     try {
-      global.localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+      global.localStorage.setItem(storageKey, JSON.stringify(settings));
     } catch (_error) {
       // The dashboard still works when storage is unavailable.
     }
@@ -317,17 +339,211 @@
     }
   }
 
+  function validCoordinates(lat, lon) {
+    return Number.isFinite(lat) && Number.isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180;
+  }
+
+  function messageMatches(decoded, messageId, messageName) {
+    return decoded.messageId === messageId || decoded.messageName === messageName;
+  }
+
+  function renderPolyline(element, samples, now, windowMs, minimum, maximum, width = 300, height = 100) {
+    if (!element || samples.length === 0 || !Number.isFinite(minimum) || !Number.isFinite(maximum)) {
+      element?.setAttribute("points", "");
+      return;
+    }
+    const span = Math.max(maximum - minimum, 0.0001);
+    const start = now - windowMs;
+    const points = samples
+      .filter((sample) => sample.time >= start)
+      .map((sample) => {
+        const x = clamp(((sample.time - start) / windowMs) * width, 0, width);
+        const y = height - clamp(((sample.value - minimum) / span) * height, 0, height);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      });
+    element.setAttribute("points", points.join(" "));
+  }
+
+  function longestAbove(samples, threshold, now) {
+    if (samples.length === 0) {
+      return 0;
+    }
+    let longest = 0;
+    let startedAt = null;
+    let previous = null;
+    for (const sample of samples) {
+      if (sample.value > threshold && startedAt === null) {
+        startedAt = previous && previous.value <= threshold ? sample.time : sample.time;
+      } else if (sample.value <= threshold && startedAt !== null) {
+        longest = Math.max(longest, sample.time - startedAt);
+        startedAt = null;
+      }
+      previous = sample;
+    }
+    if (startedAt !== null) {
+      longest = Math.max(longest, now - startedAt);
+    }
+    return longest / 1000;
+  }
+
+  function linearTrend(samples, now) {
+    const recent = samples.filter((sample) => sample.time >= now - 10000);
+    if (recent.length < 2 || recent.at(-1).time - recent[0].time < 2000) {
+      return null;
+    }
+    const origin = recent[0].time;
+    const points = recent.map((sample) => ({ x: (sample.time - origin) / 1000, y: sample.value }));
+    const meanX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const meanY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
+    const denominator = points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+    if (denominator === 0) {
+      return null;
+    }
+    const slope = points.reduce(
+      (sum, point) => sum + (point.x - meanX) * (point.y - meanY),
+      0,
+    ) / denominator;
+    return { slope, value: recent.at(-1).value, time: recent.at(-1).time };
+  }
+
+  class GnssMap {
+    constructor(container, emptyElement) {
+      this.container = container;
+      this.emptyElement = emptyElement;
+      this.map = null;
+      this.markers = new Map();
+      this.trails = new Map();
+      this.hasPosition = false;
+      this.sources = {
+        pos: { label: "POS", color: "#3478c7", zIndex: 500 },
+        gps1: { label: "GPS1", color: "#e57b25", zIndex: 510 },
+        gps2: { label: "GPS2", color: "#2e9b68", zIndex: 520 },
+      };
+      this.initialize();
+    }
+
+    initialize() {
+      try {
+        if (!global.L?.map || !global.L?.tileLayer) {
+          throw new Error("Leaflet is unavailable");
+        }
+        this.map = global.L.map(this.container, {
+          center: [0, 0],
+          zoom: 2,
+          zoomControl: true,
+          attributionControl: true,
+          keyboard: false,
+          worldCopyJump: true,
+        });
+        global.L.tileLayer(ESRI_SATELLITE_TILES, {
+          attribution: "Tiles &copy; Esri",
+          maxZoom: 20,
+        }).addTo(this.map);
+        for (const [key, source] of Object.entries(this.sources)) {
+          this.trails.set(
+            key,
+            global.L.polyline([], {
+              color: source.color,
+              opacity: 0.9,
+              weight: 2.5,
+              interactive: false,
+            }).addTo(this.map),
+          );
+        }
+        if (global.ResizeObserver) {
+          this.resizeObserver = new global.ResizeObserver(() => this.map?.invalidateSize({ pan: false }));
+          this.resizeObserver.observe(this.container);
+        }
+      } catch (error) {
+        this.emptyElement.textContent = `GNSS map unavailable: ${error.message}`;
+      }
+    }
+
+    createMarker(key, source, position) {
+      const config = this.sources[key];
+      const icon = global.L.divIcon({
+        className: "gnss-map-marker",
+        html: `<span class="gnss-marker-symbol" style="--gnss-source:${config.color}" aria-hidden="true"></span>`,
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+      });
+      const marker = global.L.marker(position, {
+        icon,
+        title: config.label,
+        zIndexOffset: config.zIndex,
+      }).addTo(this.map);
+      marker.bindTooltip(config.label, { direction: "top", offset: [0, -8] });
+      this.markers.set(key, marker);
+    }
+
+    update(key, source) {
+      if (!this.map || !validCoordinates(source.lat, source.lon)) {
+        return;
+      }
+      const position = [source.lat, source.lon];
+      const marker = this.markers.get(key);
+      if (marker) {
+        marker.setLatLng(position);
+      } else {
+        this.createMarker(key, source, position);
+      }
+      this.trails.get(key)?.setLatLngs(source.trail.map((point) => [point.lat, point.lon]));
+      this.emptyElement.hidden = true;
+      if (!this.hasPosition) {
+        this.map.setView(position, 18, { animate: false });
+        this.hasPosition = true;
+      } else if (key === "pos" || !this.markers.has("pos")) {
+        this.map.panTo(position, { animate: false });
+      }
+    }
+
+    invalidate() {
+      global.setTimeout(() => this.map?.invalidateSize({ pan: false }), 0);
+    }
+
+    reset() {
+      for (const marker of this.markers.values()) {
+        this.map?.removeLayer(marker);
+      }
+      this.markers.clear();
+      for (const trail of this.trails.values()) {
+        trail.setLatLngs([]);
+      }
+      this.hasPosition = false;
+      this.emptyElement.hidden = false;
+      this.emptyElement.textContent = "Waiting for GNSS positions";
+      this.map?.setView([0, 0], 2, { animate: false });
+    }
+  }
+
   class Dashboard {
-    constructor() {
+    constructor(options = {}) {
       this.root = document.querySelector("#telemetry-grid");
       this.settingsDialog = document.querySelector("#dashboard-settings");
-      this.settings = loadSettings();
+      this.storageKey = options.storageKey || STORAGE_KEY;
+      this.settings = loadSettings(this.storageKey);
       this.state = null;
       this.trail = [];
       this.lastTrailTimestamp = 0;
       this.fieldRegistry = new Map();
       this.observedMessages = new Map();
       this.customHistory = new Map();
+      this.gnssState = {
+        pos: { trail: [], updatedAt: 0 },
+        gps1: { trail: [], updatedAt: 0 },
+        gps2: { trail: [], updatedAt: 0 },
+        satelliteHistory: [],
+      };
+      this.miscState = {
+        imu: { samples: [], updatedAt: 0, value: null },
+        airspeed: { samples: [], updatedAt: 0, value: null },
+        current: { samples: [], updatedAt: 0, value: null },
+      };
+      this.temperatureState = {
+        histories: Array.from({ length: 4 }, () => []),
+        values: Array(4).fill(null),
+        updatedAt: 0,
+      };
 
       this.elements = {
         freshness: document.querySelector("#telemetry-freshness"),
@@ -357,6 +573,39 @@
         batteryRemaining: document.querySelector("#battery-remaining"),
         batteryBar: document.querySelector("#battery-bar"),
         batterySource: document.querySelector("#battery-source"),
+        gnssEmpty: document.querySelector("#gnss-map-empty"),
+        gnssPos: document.querySelector("#gnss-pos-readout"),
+        gnssGps1: document.querySelector("#gnss-gps1-readout"),
+        gnssGps2: document.querySelector("#gnss-gps2-readout"),
+        gnssGps1Status: document.querySelector("#gnss-gps1-status"),
+        gnssGps2Status: document.querySelector("#gnss-gps2-status"),
+        gnssDrift: document.querySelector("#gnss-drift-value"),
+        gnssPosOffset: document.querySelector("#gnss-position-offset"),
+        gnssSatCurrent: document.querySelector("#gnss-sat-current"),
+        gnssSatLine: document.querySelector("#gnss-sat-line"),
+        gnssSatThreshold: document.querySelector("#gnss-sat-threshold"),
+        misc: Object.fromEntries(
+          ["imu", "airspeed", "current"].map((key) => [key, {
+            value: document.querySelector(`#misc-${key}-value`),
+            status: document.querySelector(`#misc-${key}-status`),
+            longest: document.querySelector(`#misc-${key}-longest`),
+            line: document.querySelector(`#misc-${key}-line`),
+            thresholdLine: document.querySelector(`#misc-${key}-threshold-line`),
+            threshold: document.querySelector(`#misc-${key}-threshold`),
+          }]),
+        ),
+        escValues: Array.from({ length: 4 }, (_, index) => document.querySelector(`#esc-${index + 1}-value`)),
+        escCards: Array.from({ length: 4 }, (_, index) => document.querySelector(`#esc-${index + 1}-card`)),
+        escLines: Array.from({ length: 4 }, (_, index) => document.querySelector(`#esc-${index + 1}-line`)),
+        escForecasts: Array.from(
+          { length: 4 },
+          (_, index) => document.querySelector(`#esc-${index + 1}-forecast`),
+        ),
+        escWarningLine: document.querySelector("#esc-warning-line"),
+        escCriticalLine: document.querySelector("#esc-critical-line"),
+        escSpread: document.querySelector("#esc-spread"),
+        escShutdown: document.querySelector("#esc-shutdown"),
+        escStatus: document.querySelector("#esc-status"),
       };
 
       this.satelliteMap = new SatelliteMap(
@@ -366,10 +615,15 @@
         this.elements.mapSetupTitle,
         this.elements.mapSetupDetail,
       );
+      this.gnssMap = new GnssMap(document.querySelector("#gnss-map"), this.elements.gnssEmpty);
 
       this.bindSettings();
+      this.bindAdvancedWidgets();
       this.applySettings();
-      this.freshnessTimer = global.setInterval(() => this.renderFreshness(), 1000);
+      this.freshnessTimer = global.setInterval(() => {
+        this.renderFreshness();
+        this.renderAdvancedWidgets();
+      }, 1000);
     }
 
     reset() {
@@ -379,7 +633,22 @@
       this.fieldRegistry.clear();
       this.observedMessages.clear();
       this.customHistory.clear();
+      this.gnssState = {
+        pos: { trail: [], updatedAt: 0 },
+        gps1: { trail: [], updatedAt: 0 },
+        gps2: { trail: [], updatedAt: 0 },
+        satelliteHistory: [],
+      };
+      for (const metric of Object.values(this.miscState)) {
+        metric.samples = [];
+        metric.updatedAt = 0;
+        metric.value = null;
+      }
+      this.temperatureState.histories = Array.from({ length: 4 }, () => []);
+      this.temperatureState.values = Array(4).fill(null);
+      this.temperatureState.updatedAt = 0;
       this.satelliteMap.reset();
+      this.gnssMap.reset();
       this.elements.positionTrail.setAttribute("points", "");
       this.elements.vehicleMarker.setAttribute("hidden", "");
       this.elements.positionEmpty.hidden = false;
@@ -391,6 +660,7 @@
       this.renderAirspeed(null);
       this.renderAgl(null);
       this.renderBattery(null);
+      this.renderAdvancedWidgets();
       this.renderAllCustomWidgets();
       this.renderFreshness();
     }
@@ -419,6 +689,10 @@
       if (!decoded) {
         return;
       }
+
+      this.ingestGnss(decoded, now);
+      this.ingestMisc(decoded, now);
+      this.ingestEscTemperature(decoded, now);
 
       let message = this.observedMessages.get(decoded.messageId);
       let catalogChanged = false;
@@ -480,6 +754,286 @@
       if (catalogChanged && this.settingsDialog.open) {
         this.syncFieldOptions();
       }
+    }
+
+    ingestGnss(decoded, now) {
+      let key = null;
+      if (messageMatches(decoded, 33, "GLOBAL_POSITION_INT")) {
+        key = "pos";
+      } else if (messageMatches(decoded, 24, "GPS_RAW_INT")) {
+        key = "gps1";
+      } else if (messageMatches(decoded, 124, "GPS2_RAW")) {
+        key = "gps2";
+      }
+      if (!key) {
+        return;
+      }
+
+      const fields = decoded.fields;
+      const source = this.gnssState[key];
+      const lat = Number(fields.lat) / 1e7;
+      const lon = Number(fields.lon) / 1e7;
+      source.updatedAt = now;
+      source.fix = Number.isFinite(Number(fields.fix_type)) ? Number(fields.fix_type) : null;
+      const satellites = Number(fields.satellites_visible);
+      source.satellites = Number.isFinite(satellites) && satellites !== 255 ? satellites : null;
+      const eph = Number(fields.eph);
+      source.hdop = Number.isFinite(eph) && eph !== 65535 ? eph / 100 : null;
+      source.altitude = Number.isFinite(Number(fields.alt)) ? Number(fields.alt) / 1000 : null;
+      source.course = key === "pos"
+        ? (Number(fields.hdg) === 65535 ? null : Number(fields.hdg) / 100)
+        : (Number(fields.cog) === 65535 ? null : Number(fields.cog) / 100);
+
+      if (validCoordinates(lat, lon) && !(lat === 0 && lon === 0)) {
+        source.lat = lat;
+        source.lon = lon;
+        const previous = source.trail.at(-1);
+        if (!previous || distanceMeters(previous, source) >= 0.1) {
+          source.trail.push({ lat, lon, time: now });
+          source.trail = source.trail.slice(-160);
+        }
+        this.gnssMap.update(key, source);
+      }
+
+      if (key === "gps2" && Number.isFinite(source.satellites)) {
+        this.gnssState.satelliteHistory.push({ time: now, value: source.satellites });
+        this.gnssState.satelliteHistory = this.gnssState.satelliteHistory
+          .filter((sample) => sample.time >= now - 60000)
+          .slice(-MAX_HISTORY_POINTS);
+      }
+      this.renderGnss(now);
+    }
+
+    recordMisc(key, value, now) {
+      if (!Number.isFinite(value)) {
+        return;
+      }
+      const metric = this.miscState[key];
+      metric.value = value;
+      metric.updatedAt = now;
+      metric.samples.push({ time: now, value });
+      metric.samples = metric.samples.filter((sample) => sample.time >= now - 60000).slice(-MAX_HISTORY_POINTS);
+      this.renderMiscMetric(key, now);
+    }
+
+    ingestMisc(decoded, now) {
+      const fields = decoded.fields;
+      if (messageMatches(decoded, 27, "RAW_IMU")) {
+        const imuId = Number(fields.id);
+        if (!Number.isFinite(imuId) || imuId === 0) {
+          this.recordMisc("imu", Number(fields.xacc) / 1000, now);
+        }
+      } else if (messageMatches(decoded, 74, "VFR_HUD")) {
+        this.recordMisc("airspeed", Number(fields.airspeed), now);
+      } else if (messageMatches(decoded, 147, "BATTERY_STATUS")) {
+        const batteryId = Number(fields.id);
+        if (!Number.isFinite(batteryId) || batteryId === 0) {
+          this.recordMisc("current", Math.abs(Number(fields.current_battery)) / 100, now);
+        }
+      }
+    }
+
+    ingestEscTemperature(decoded, now) {
+      if (!messageMatches(decoded, 11030, "ESC_TELEMETRY_1_TO_4")) {
+        return;
+      }
+      const temperatures = Array.from(decoded.fields.temperature || []).slice(0, 4);
+      let received = false;
+      temperatures.forEach((rawValue, index) => {
+        const value = Number(rawValue);
+        if (!Number.isFinite(value) || value <= 0 || value >= 255) {
+          return;
+        }
+        received = true;
+        this.temperatureState.values[index] = value;
+        this.temperatureState.histories[index].push({ time: now, value });
+        this.temperatureState.histories[index] = this.temperatureState.histories[index]
+          .filter((sample) => sample.time >= now - 60000)
+          .slice(-MAX_HISTORY_POINTS);
+      });
+      if (received) {
+        this.temperatureState.updatedAt = now;
+        this.renderEscTemperature(now);
+      }
+    }
+
+    bindAdvancedWidgets() {
+      for (const key of ["imu", "airspeed", "current"]) {
+        const input = this.elements.misc[key].threshold;
+        input.value = this.settings.miscThresholds[key];
+        input.addEventListener("change", () => {
+          const value = Number(input.value);
+          if (!Number.isFinite(value) || value <= 0) {
+            input.value = this.settings.miscThresholds[key];
+            return;
+          }
+          this.settings.miscThresholds[key] = value;
+          this.commitSettings();
+          this.renderMiscMetric(key);
+        });
+      }
+    }
+
+    renderAdvancedWidgets(now = Date.now()) {
+      this.renderGnss(now);
+      for (const key of ["imu", "airspeed", "current"]) {
+        this.renderMiscMetric(key, now);
+      }
+      this.renderEscTemperature(now);
+    }
+
+    renderGnss(now = Date.now()) {
+      const renderSource = (key, element, statusElement) => {
+        const source = this.gnssState[key];
+        if (!validCoordinates(source.lat, source.lon)) {
+          element.textContent = "Waiting for position";
+          if (statusElement) {
+            statusElement.textContent = "No data";
+            statusElement.dataset.state = "waiting";
+          }
+          return;
+        }
+        const details = [`${source.lat.toFixed(7)}, ${source.lon.toFixed(7)}`];
+        if (Number.isFinite(source.fix)) {
+          details.push(`fix ${source.fix}`);
+        }
+        if (Number.isFinite(source.satellites)) {
+          details.push(`${source.satellites} sats`);
+        }
+        if (Number.isFinite(source.hdop)) {
+          details.push(`HDOP ${source.hdop.toFixed(2)}`);
+        }
+        element.textContent = details.join(" · ");
+        if (statusElement) {
+          const stale = now - source.updatedAt >= 5000;
+          statusElement.textContent = stale ? `${Math.round((now - source.updatedAt) / 1000)}s old` : "Live";
+          statusElement.dataset.state = stale ? "stale" : "live";
+        }
+      };
+
+      renderSource("pos", this.elements.gnssPos, null);
+      renderSource("gps1", this.elements.gnssGps1, this.elements.gnssGps1Status);
+      renderSource("gps2", this.elements.gnssGps2, this.elements.gnssGps2Status);
+
+      const gps1 = this.gnssState.gps1;
+      const gps2 = this.gnssState.gps2;
+      const pos = this.gnssState.pos;
+      this.elements.gnssDrift.textContent = validCoordinates(gps1.lat, gps1.lon) && validCoordinates(gps2.lat, gps2.lon)
+        ? `${distanceMeters(gps1, gps2).toFixed(2)} m`
+        : "—";
+      this.elements.gnssPosOffset.textContent = validCoordinates(pos.lat, pos.lon) && validCoordinates(gps1.lat, gps1.lon)
+        ? `${distanceMeters(pos, gps1).toFixed(2)} m`
+        : "—";
+      this.elements.gnssSatCurrent.textContent = Number.isFinite(gps2.satellites)
+        ? `${gps2.satellites} satellites`
+        : "Waiting for GPS2";
+
+      const samples = this.gnssState.satelliteHistory;
+      const maximum = Math.max(20, ...samples.map((sample) => sample.value));
+      renderPolyline(this.elements.gnssSatLine, samples, now, 60000, 0, maximum, 300, 74);
+      const thresholdY = 74 - clamp((10 / maximum) * 74, 0, 74);
+      this.elements.gnssSatThreshold.setAttribute("y1", thresholdY.toFixed(1));
+      this.elements.gnssSatThreshold.setAttribute("y2", thresholdY.toFixed(1));
+    }
+
+    renderMiscMetric(key, now = Date.now()) {
+      const definitions = {
+        imu: { unit: "g", decimals: 2 },
+        airspeed: { unit: "m/s", decimals: 1 },
+        current: { unit: "A", decimals: 1 },
+      };
+      const definition = definitions[key];
+      const metric = this.miscState[key];
+      const elements = this.elements.misc[key];
+      const threshold = this.settings.miscThresholds[key];
+      elements.threshold.value = threshold;
+      elements.value.textContent = Number.isFinite(metric.value)
+        ? `${metric.value.toFixed(definition.decimals)} ${definition.unit}`
+        : "—";
+      const stale = metric.updatedAt === 0 || now - metric.updatedAt >= 5000;
+      elements.status.textContent = metric.updatedAt === 0
+        ? "Waiting for MAVLink"
+        : stale
+          ? `${Math.round((now - metric.updatedAt) / 1000)}s old`
+          : metric.value > threshold
+            ? "Above threshold"
+            : "Live";
+      elements.status.dataset.state = metric.updatedAt === 0 ? "waiting" : stale ? "stale" : metric.value > threshold ? "alert" : "live";
+      elements.longest.textContent = `${longestAbove(metric.samples, threshold, now).toFixed(1)} s longest`;
+
+      const values = [...metric.samples.map((sample) => sample.value), threshold];
+      let minimum = values.length > 0 ? Math.min(...values) : 0;
+      let maximum = values.length > 0 ? Math.max(...values) : threshold;
+      const padding = Math.max((maximum - minimum) * 0.15, Math.abs(threshold) * 0.08, 0.2);
+      minimum = Math.min(0, minimum - padding);
+      maximum += padding;
+      renderPolyline(elements.line, metric.samples, now, 60000, minimum, maximum, 300, 86);
+      const thresholdY = 86 - ((threshold - minimum) / Math.max(maximum - minimum, 0.001)) * 86;
+      elements.thresholdLine.setAttribute("y1", thresholdY.toFixed(1));
+      elements.thresholdLine.setAttribute("y2", thresholdY.toFixed(1));
+    }
+
+    renderEscTemperature(now = Date.now()) {
+      const warning = 55;
+      const critical = 85;
+      const stale = this.temperatureState.updatedAt === 0 || now - this.temperatureState.updatedAt >= 5000;
+      const currentValues = this.temperatureState.values.filter(Number.isFinite);
+      const allValues = this.temperatureState.histories.flat().map((sample) => sample.value);
+      const trends = this.temperatureState.histories.map((history) => linearTrend(history, now));
+      const forecastValues = trends
+        .filter(Boolean)
+        .map((trend) => trend.value + trend.slope * Math.max((now + 20000 - trend.time) / 1000, 0));
+      const minimum = Math.min(20, ...allValues, ...forecastValues);
+      const maximum = Math.max(90, ...allValues, ...forecastValues) + 5;
+      const yFor = (value) => 100 - clamp(((value - minimum) / Math.max(maximum - minimum, 1)) * 100, 0, 100);
+
+      this.temperatureState.histories.forEach((history, index) => {
+        renderPolyline(this.elements.escLines[index], history, now, 60000, minimum, maximum, 225, 100);
+        const trend = trends[index];
+        const forecast = this.elements.escForecasts[index];
+        if (trend) {
+          const atNow = trend.value + trend.slope * Math.max((now - trend.time) / 1000, 0);
+          const atFuture = trend.value + trend.slope * Math.max((now + 20000 - trend.time) / 1000, 0);
+          forecast.setAttribute("x1", "225");
+          forecast.setAttribute("y1", yFor(atNow).toFixed(1));
+          forecast.setAttribute("x2", "300");
+          forecast.setAttribute("y2", yFor(atFuture).toFixed(1));
+          forecast.hidden = false;
+        } else {
+          forecast.hidden = true;
+        }
+
+        const value = this.temperatureState.values[index];
+        this.elements.escValues[index].textContent = Number.isFinite(value) ? `${value.toFixed(0)} °C` : "—";
+        this.elements.escCards[index].dataset.state = stale || !Number.isFinite(value)
+          ? "stale"
+          : value >= critical
+            ? "critical"
+            : value >= warning
+              ? "warning"
+              : "normal";
+      });
+
+      for (const [element, value] of [[this.elements.escWarningLine, warning], [this.elements.escCriticalLine, critical]]) {
+        const y = yFor(value).toFixed(1);
+        element.setAttribute("y1", y);
+        element.setAttribute("y2", y);
+      }
+      this.elements.escSpread.textContent = currentValues.length > 1
+        ? `${(Math.max(...currentValues) - Math.min(...currentValues)).toFixed(1)} °C`
+        : "—";
+      const shutdownTimes = trends
+        .map((trend) => trend && trend.slope > 0.02 ? (critical - trend.value) / trend.slope : null)
+        .filter((seconds) => Number.isFinite(seconds) && seconds >= 0);
+      this.elements.escShutdown.textContent = shutdownTimes.length > 0
+        ? `${Math.min(...shutdownTimes).toFixed(0)} s`
+        : "No rising trend";
+      this.elements.escStatus.textContent = this.temperatureState.updatedAt === 0
+        ? "Waiting for ESC_TELEMETRY_1_TO_4"
+        : stale
+          ? `Last update ${Math.round((now - this.temperatureState.updatedAt) / 1000)}s ago`
+          : "60s history · 20s linear forecast";
+      this.elements.escStatus.dataset.state = this.temperatureState.updatedAt === 0 ? "waiting" : stale ? "stale" : "live";
     }
 
     renderFreshness() {
@@ -829,6 +1383,11 @@
       document.querySelector("#trail-points").value = this.settings.trailPoints;
       document.querySelector("#airspeed-scale").value = this.settings.airspeedScaleMps;
       document.querySelector("#altitude-scale").value = this.settings.altitudeScaleM;
+      for (const key of ["imu", "airspeed", "current"]) {
+        if (this.elements.misc?.[key]?.threshold) {
+          this.elements.misc[key].threshold.value = this.settings.miscThresholds[key];
+        }
+      }
     }
 
     renderWidgetSettings() {
@@ -1039,7 +1598,7 @@
     }
 
     commitSettings() {
-      saveSettings(this.settings);
+      saveSettings(this.settings, this.storageKey);
       this.applySettings();
     }
 
@@ -1049,6 +1608,9 @@
 
       for (const id of this.settings.order) {
         const widget = this.root.querySelector(`[data-widget="${id}"]`);
+        if (!widget) {
+          continue;
+        }
         widget.hidden = !this.settings.visible[id];
         this.root.appendChild(widget);
       }
@@ -1065,12 +1627,16 @@
         this.renderAgl(null);
         this.renderBattery(null);
       }
+      this.renderAdvancedWidgets();
+      if (this.settings.visible.gnss) {
+        this.gnssMap.invalidate();
+      }
     }
   }
 
   global.MavMoleDashboard = {
-    create() {
-      const dashboard = new Dashboard();
+    create(options = {}) {
+      const dashboard = new Dashboard(options);
       this.current = dashboard;
       return dashboard;
     },

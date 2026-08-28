@@ -5,13 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Connect Mission Planner to the MavMole relay.">
     <title>Be a Mole — MavMole</title>
-    <link rel="icon" href="/assets/icons/mole-circle.png" type="image/png">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="/css/style.css">
   </head>
   <body class="tool-page mole-page">
     <header class="app-header">
       <a class="brand" href="/" aria-label="MavMole home">
-        <img src="/assets/icons/mole-small.png" alt="">
+        <span class="brand-mark" aria-hidden="true">M</span>
         <span>MavMole</span>
       </a>
       <nav aria-label="Primary navigation">
@@ -20,14 +21,16 @@
       </nav>
     </header>
 
-    <main class="tool-shell">
-      <header class="page-heading">
+    <main class="tool-shell dashboard-shell">
+      <header class="page-heading dashboard-page-heading">
         <div>
           <p class="eyebrow">Publisher workspace</p>
           <h1>Connect Mission Planner</h1>
-          <p>Open the local WebSocket, then forward every binary frame through the MavMole relay.</p>
+          <p>Inspect Mission Planner telemetry locally, then start or stop relay forwarding independently.</p>
         </div>
-        <span class="mode-badge">Mole</span>
+        <button id="customize-dashboard-button" class="secondary customize-button" type="button">
+          <span aria-hidden="true">☷</span> Customize widgets
+        </button>
       </header>
 
       <aside class="notice" aria-label="Browser permission notice">
@@ -54,12 +57,23 @@
               <span aria-hidden="true">WS</span>
               <input id="local-url" name="local-url" type="url" value="ws://127.0.0.1:56781/websocket/raw" required spellcheck="false">
             </div>
-            <p class="field-help">The built-in raw endpoint normally uses port 56781. You can replace it with another local WebSocket URL.</p>
+            <p class="field-help">Mole automatically tries this local endpoint when the page opens. It does not start forwarding.</p>
             <div class="actions">
-              <button id="connect-button" type="submit">Connect and forward</button>
-              <button id="disconnect-button" class="secondary" type="button" disabled>Disconnect</button>
+              <button id="connect-local-button" type="submit">Connect locally</button>
+              <button id="disconnect-local-button" class="secondary" type="button" disabled>Disconnect local</button>
             </div>
           </form>
+
+          <div class="forward-control">
+            <div>
+              <strong>Relay forwarding</strong>
+              <span>Optional. Your local dashboard keeps running when forwarding is stopped.</span>
+            </div>
+            <div class="actions">
+              <button id="start-forwarding-button" type="button" disabled>Start forwarding</button>
+              <button id="stop-forwarding-button" class="secondary" type="button" disabled>Stop forwarding</button>
+            </div>
+          </div>
         </section>
 
         <section class="telemetry-panel" aria-labelledby="tunnel-status-title">
@@ -74,15 +88,15 @@
           <dl class="status-grid">
             <div>
               <dt>Local WebSocket</dt>
-              <dd id="local-status" class="status" data-state="idle" aria-live="polite">Disconnected</dd>
+              <dd id="local-status" class="status" data-state="connecting" aria-live="polite">Auto-connecting…</dd>
             </div>
             <div>
               <dt>MavMole relay</dt>
-              <dd id="relay-status" class="status" data-state="idle" aria-live="polite">Disconnected</dd>
+              <dd id="relay-status" class="status" data-state="idle" aria-live="polite">Not connected</dd>
             </div>
             <div>
               <dt>Forwarding</dt>
-              <dd id="forwarding-status" class="status" data-state="idle" aria-live="polite">Stopped</dd>
+              <dd id="forwarding-status" class="status" data-state="idle" aria-live="polite">Off</dd>
             </div>
             <div>
               <dt>Stream viewers</dt>
@@ -94,20 +108,212 @@
             <div><dt>Frames</dt><dd id="frame-count">0</dd></div>
             <div><dt>Data</dt><dd id="byte-count">0 B</dd></div>
             <div><dt>Current rate</dt><dd id="byte-rate">0 B/s</dd></div>
-            <div><dt>Dropped</dt><dd id="dropped-count">0</dd></div>
+            <div><dt>Forwarded</dt><dd id="forwarded-count">0</dd></div>
+            <div><dt>Ignored</dt><dd id="dropped-count">0</dd></div>
           </dl>
         </section>
       </div>
 
-      <p class="privacy-note"><span aria-hidden="true"></span> Binary data is forwarded without being parsed, changed or stored. Text frames are ignored.</p>
+      <section class="flight-dashboard mole-local-dashboard" aria-labelledby="flight-dashboard-title">
+        <div class="dashboard-heading">
+          <div>
+            <p class="eyebrow">Local Mission Planner stream</p>
+            <h2 id="flight-dashboard-title">Mole telemetry</h2>
+          </div>
+          <span id="telemetry-freshness" class="telemetry-freshness" data-state="waiting">Waiting for MAVLink</span>
+        </div>
+
+        <div id="telemetry-grid" class="telemetry-dashboard" data-layout="balanced">
+          <article class="telemetry-widget position-widget" data-widget="position">
+            <header class="widget-heading">
+              <div><span class="widget-kicker">Navigation</span><h3>Position</h3></div>
+              <a id="map-link" class="widget-link" aria-disabled="true" target="_blank" rel="noreferrer">Open map ↗</a>
+            </header>
+            <div class="position-map" data-map-state="loading">
+              <div id="satellite-map" class="satellite-map" aria-label="Satellite position map"></div>
+              <svg class="local-map-overlay" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Local aircraft trail">
+                <defs>
+                  <pattern id="mole-map-grid-small" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M 10 0 L 0 0 0 10" fill="none" stroke="currentColor" stroke-width="0.25"></path></pattern>
+                  <pattern id="mole-map-grid-large" width="50" height="50" patternUnits="userSpaceOnUse"><rect width="50" height="50" fill="url(#mole-map-grid-small)"></rect><path d="M 50 0 L 0 0 0 50" fill="none" stroke="currentColor" stroke-width="0.45"></path></pattern>
+                </defs>
+                <rect class="map-grid-fill" width="100" height="100" fill="url(#mole-map-grid-large)"></rect>
+                <polyline id="position-trail" class="position-trail" points=""></polyline>
+                <g id="vehicle-marker" class="vehicle-marker" hidden><circle r="5.2"></circle><path d="M 0 -4 L 3.1 3.8 L 0 2.2 L -3.1 3.8 Z"></path></g>
+              </svg>
+              <span class="north-indicator">N</span>
+              <span id="map-provider-status" class="trail-label">Loading satellite</span>
+              <div id="map-setup" class="map-setup" hidden>
+                <strong id="map-setup-title">Satellite imagery could not load</strong>
+                <span id="map-setup-detail">Check the internet connection and retry.</span>
+                <button id="retry-map-button" class="secondary" type="button">Retry map</button>
+              </div>
+              <div id="position-empty" class="widget-empty"><span class="empty-pulse" aria-hidden="true"></span>Waiting for a valid position</div>
+            </div>
+            <dl class="position-readout">
+              <div><dt>Latitude</dt><dd id="latitude-value">—</dd></div>
+              <div><dt>Longitude</dt><dd id="longitude-value">—</dd></div>
+              <div><dt>Heading</dt><dd id="heading-value">—</dd></div>
+            </dl>
+          </article>
+
+          <article class="telemetry-widget airspeed-widget" data-widget="airspeed">
+            <header class="widget-heading"><div><span class="widget-kicker">Motion</span><h3>Airspeed</h3></div><span class="widget-symbol" aria-hidden="true">AS</span></header>
+            <div class="airspeed-gauge">
+              <svg viewBox="0 0 120 120" aria-hidden="true"><circle class="gauge-track" cx="60" cy="60" r="48" pathLength="100"></circle><circle id="airspeed-arc" class="gauge-value" cx="60" cy="60" r="48" pathLength="100"></circle></svg>
+              <div class="gauge-readout"><strong id="airspeed-value">—</strong><span id="airspeed-unit">m/s</span></div>
+            </div>
+            <p id="airspeed-source" class="widget-source">No airspeed message</p>
+          </article>
+
+          <article class="telemetry-widget agl-widget" data-widget="agl">
+            <header class="widget-heading"><div><span class="widget-kicker">Clearance</span><h3>AGL altitude</h3></div><span class="widget-symbol" aria-hidden="true">AGL</span></header>
+            <div class="altitude-display">
+              <div class="altitude-value"><strong id="agl-value">—</strong><span id="agl-unit">m</span></div>
+              <div class="altitude-scale" aria-hidden="true"><div id="agl-fill" class="altitude-fill"></div><span></span><span></span><span></span><span></span><span></span></div>
+            </div>
+            <p id="agl-source" class="widget-source">No AGL source</p>
+          </article>
+
+          <article class="telemetry-widget battery-widget" data-widget="battery">
+            <header class="widget-heading"><div><span class="widget-kicker">Power system</span><h3>Battery</h3></div><span id="battery-remaining" class="battery-percentage">—</span></header>
+            <dl class="battery-values">
+              <div><dt>Voltage</dt><dd id="battery-voltage">—</dd></div>
+              <div><dt>Current <span title="Current is displayed as an absolute value">|A|</span></dt><dd id="battery-current">—</dd></div>
+              <div><dt>Power</dt><dd id="battery-power">—</dd></div>
+            </dl>
+            <div class="battery-track" role="meter" aria-label="Battery remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="battery-bar" class="battery-bar"></div></div>
+            <p id="battery-source" class="widget-source">No battery message</p>
+          </article>
+
+          <article class="telemetry-widget advanced-dashboard-widget gnss-widget" data-widget="gnss">
+            <header class="widget-heading"><div><span class="widget-kicker">Navigation integrity</span><h3>GNSS dashboard</h3></div><span class="widget-symbol" aria-hidden="true">GPS</span></header>
+            <div class="gnss-layout">
+              <div class="gnss-map-shell">
+                <div id="gnss-map" class="gnss-map" aria-label="GNSS satellite map"></div>
+                <div id="gnss-map-empty" class="widget-empty">Waiting for GNSS positions</div>
+                <div class="gnss-map-legend" aria-label="GNSS source colours"><span data-source="pos">POS</span><span data-source="gps1">GPS1</span><span data-source="gps2">GPS2</span></div>
+              </div>
+              <div class="gnss-details">
+                <div class="gnss-source-card" data-source="pos"><div><strong>POS</strong><span>GLOBAL_POSITION_INT</span></div><p id="gnss-pos-readout">Waiting for position</p></div>
+                <div class="gnss-source-card" data-source="gps1"><div><strong>GPS1</strong><span id="gnss-gps1-status" data-state="waiting">No data</span></div><p id="gnss-gps1-readout">Waiting for position</p></div>
+                <div class="gnss-source-card" data-source="gps2"><div><strong>GPS2</strong><span id="gnss-gps2-status" data-state="waiting">No data</span></div><p id="gnss-gps2-readout">Waiting for position</p></div>
+                <dl class="gnss-offsets"><div><dt>GPS1 ↔ GPS2 drift</dt><dd id="gnss-drift-value">—</dd></div><div><dt>POS ↔ GPS1 offset</dt><dd id="gnss-position-offset">—</dd></div></dl>
+                <div class="advanced-chart-block">
+                  <div class="advanced-chart-heading"><span>GPS2 satellite count · 60s</span><strong id="gnss-sat-current">Waiting for GPS2</strong></div>
+                  <svg class="advanced-line-chart gnss-sat-chart" viewBox="0 0 300 74" preserveAspectRatio="none" aria-label="GPS2 satellites over 60 seconds"><line id="gnss-sat-threshold" class="chart-threshold" x1="0" x2="300" y1="37" y2="37"></line><polyline id="gnss-sat-line" class="advanced-chart-line" points=""></polyline></svg>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="telemetry-widget advanced-dashboard-widget misc-widget" data-widget="misc">
+            <header class="widget-heading"><div><span class="widget-kicker">Threshold monitor</span><h3>Misc dashboard</h3></div><span class="widget-symbol" aria-hidden="true">60s</span></header>
+            <div class="misc-chart-grid">
+              <section class="misc-chart-card">
+                <header><div><strong>IMU X load</strong><span id="misc-imu-status" data-state="waiting">Waiting for MAVLink</span></div><output id="misc-imu-value">—</output></header>
+                <svg class="advanced-line-chart" viewBox="0 0 300 86" preserveAspectRatio="none"><line id="misc-imu-threshold-line" class="chart-threshold" x1="0" x2="300" y1="40" y2="40"></line><polyline id="misc-imu-line" class="advanced-chart-line" points=""></polyline></svg>
+                <footer><label>Threshold <input id="misc-imu-threshold" type="number" min="0.1" max="20" step="0.1"> g</label><span id="misc-imu-longest">0.0 s longest</span></footer>
+              </section>
+              <section class="misc-chart-card">
+                <header><div><strong>Airspeed</strong><span id="misc-airspeed-status" data-state="waiting">Waiting for MAVLink</span></div><output id="misc-airspeed-value">—</output></header>
+                <svg class="advanced-line-chart" viewBox="0 0 300 86" preserveAspectRatio="none"><line id="misc-airspeed-threshold-line" class="chart-threshold" x1="0" x2="300" y1="40" y2="40"></line><polyline id="misc-airspeed-line" class="advanced-chart-line" points=""></polyline></svg>
+                <footer><label>Threshold <input id="misc-airspeed-threshold" type="number" min="1" max="250" step="1"> m/s</label><span id="misc-airspeed-longest">0.0 s longest</span></footer>
+              </section>
+              <section class="misc-chart-card">
+                <header><div><strong>Battery 0 current</strong><span id="misc-current-status" data-state="waiting">Waiting for MAVLink</span></div><output id="misc-current-value">—</output></header>
+                <svg class="advanced-line-chart" viewBox="0 0 300 86" preserveAspectRatio="none"><line id="misc-current-threshold-line" class="chart-threshold" x1="0" x2="300" y1="40" y2="40"></line><polyline id="misc-current-line" class="advanced-chart-line" points=""></polyline></svg>
+                <footer><label>Threshold <input id="misc-current-threshold" type="number" min="1" max="1000" step="1"> A</label><span id="misc-current-longest">0.0 s longest</span></footer>
+              </section>
+            </div>
+          </article>
+
+          <article class="telemetry-widget advanced-dashboard-widget temperature-widget" data-widget="temperature">
+            <header class="widget-heading"><div><span class="widget-kicker">Thermal trend</span><h3>ESC temperature</h3></div><span id="esc-status" class="advanced-status" data-state="waiting">Waiting for ESC_TELEMETRY_1_TO_4</span></header>
+            <div class="esc-value-grid">
+              <div id="esc-1-card" data-state="stale"><span>ESC 1</span><strong id="esc-1-value">—</strong></div><div id="esc-2-card" data-state="stale"><span>ESC 2</span><strong id="esc-2-value">—</strong></div><div id="esc-3-card" data-state="stale"><span>ESC 3</span><strong id="esc-3-value">—</strong></div><div id="esc-4-card" data-state="stale"><span>ESC 4</span><strong id="esc-4-value">—</strong></div>
+            </div>
+            <div class="esc-chart-wrap">
+              <svg class="advanced-line-chart esc-chart" viewBox="0 0 300 100" preserveAspectRatio="none" aria-label="ESC temperatures, 60 second history and 20 second forecast">
+                <rect class="esc-forecast-zone" x="225" y="0" width="75" height="100"></rect><line id="esc-warning-line" class="temperature-threshold warning" x1="0" x2="300" y1="50" y2="50"></line><line id="esc-critical-line" class="temperature-threshold critical" x1="0" x2="300" y1="20" y2="20"></line>
+                <polyline id="esc-1-line" class="esc-series esc-series-1" points=""></polyline><polyline id="esc-2-line" class="esc-series esc-series-2" points=""></polyline><polyline id="esc-3-line" class="esc-series esc-series-3" points=""></polyline><polyline id="esc-4-line" class="esc-series esc-series-4" points=""></polyline>
+                <line id="esc-1-forecast" class="esc-forecast esc-series-1" hidden></line><line id="esc-2-forecast" class="esc-forecast esc-series-2" hidden></line><line id="esc-3-forecast" class="esc-forecast esc-series-3" hidden></line><line id="esc-4-forecast" class="esc-forecast esc-series-4" hidden></line>
+              </svg>
+              <div class="esc-chart-labels"><span>60s ago</span><strong>Now</strong><span>+20s forecast</span></div>
+            </div>
+            <dl class="esc-summary"><div><dt>Temperature spread</dt><dd id="esc-spread">—</dd></div><div><dt>Estimated time to 85 °C</dt><dd id="esc-shutdown">No rising trend</dd></div></dl>
+          </article>
+        </div>
+      </section>
+
+      <p class="privacy-note"><span aria-hidden="true"></span> MAVLink is decoded only in this browser for the local widgets. Nothing is stored; text frames are ignored.</p>
     </main>
 
+    <dialog id="dashboard-settings" class="settings-dialog" aria-labelledby="settings-title">
+      <div class="settings-card">
+        <header class="settings-heading">
+          <div><p class="eyebrow">Local display preferences</p><h2 id="settings-title">Customize Mole dashboard</h2><p>Add any observed MAVLink field or configure the built-in dashboards. Settings stay in this browser.</p></div>
+          <button id="close-settings-button" class="icon-button close-button" type="button" aria-label="Close settings">×</button>
+        </header>
+        <div class="settings-body">
+          <section class="settings-section" aria-labelledby="widgets-settings-title">
+            <h3 id="widgets-settings-title">Widgets and order</h3>
+            <div id="widget-settings-list" class="widget-settings-list"></div>
+          </section>
+          <section class="settings-section" aria-labelledby="units-settings-title">
+            <h3 id="units-settings-title">Units and layout</h3>
+            <div class="settings-grid">
+              <label>Airspeed unit<select id="speed-unit"><option value="mps">m/s</option><option value="kmh">km/h</option><option value="kt">knots</option></select></label>
+              <label>Altitude unit<select id="altitude-unit"><option value="m">metres</option><option value="ft">feet</option></select></label>
+              <label>Dashboard layout<select id="dashboard-layout"><option value="balanced">Balanced</option><option value="equal">Equal cards</option><option value="single">Single column</option></select></label>
+              <label>Accent colour<input id="dashboard-accent" type="color" value="#b86238"></label>
+            </div>
+          </section>
+          <section class="settings-section" aria-labelledby="custom-widgets-title">
+            <div class="settings-section-heading"><div><h3 id="custom-widgets-title">Custom MAVLink widgets</h3><p>Create a value, time graph or gauge from any numeric field received directly from Mission Planner.</p></div></div>
+            <div class="custom-widget-builder">
+              <div class="settings-grid custom-widget-form">
+                <label class="wide-setting">MAVLink field<select id="custom-field-select"><option value="">Connect and receive MAVLink first</option></select></label>
+                <label>Display<select id="custom-widget-type"><option value="value">Value</option><option value="chart">Time based graph</option><option value="gauge">Gauge</option></select></label>
+                <label>Custom label<input id="custom-widget-label" type="text" maxlength="80" placeholder="Automatic"></label>
+                <label>Unit<input id="custom-widget-unit" type="text" maxlength="20" placeholder="Optional"></label>
+                <label>Decimals<input id="custom-widget-decimals" type="number" min="0" max="6" step="1" value="1"></label>
+                <label class="checkbox-setting">Value transform<span><input id="custom-widget-absolute" type="checkbox"> Absolute value</span></label>
+                <label data-custom-option="gauge">Gauge minimum<input id="custom-widget-min" type="number" step="any" value="0"></label>
+                <label data-custom-option="gauge">Gauge maximum<input id="custom-widget-max" type="number" step="any" value="100"></label>
+                <label data-custom-option="chart">Time window (seconds)<input id="custom-widget-window" type="number" min="5" max="600" step="5" value="60"></label>
+              </div>
+              <div class="custom-builder-action"><button id="add-custom-widget-button" type="button">Add widget</button><span id="custom-widget-status" class="settings-status" aria-live="polite"></span></div>
+            </div>
+            <div id="custom-widget-settings-list" class="widget-settings-list custom-widget-settings-list"></div>
+          </section>
+          <section class="settings-section" aria-labelledby="scales-settings-title">
+            <h3 id="scales-settings-title">Visual scales</h3>
+            <div class="settings-grid three-settings">
+              <label>Trail points<input id="trail-points" type="number" min="10" max="250" step="10"></label>
+              <label>Airspeed max (m/s)<input id="airspeed-scale" type="number" min="5" max="200" step="5"></label>
+              <label>AGL max (m)<input id="altitude-scale" type="number" min="10" max="5000" step="10"></label>
+            </div>
+          </section>
+          <section class="settings-section profile-settings" aria-labelledby="profile-settings-title">
+            <div><h3 id="profile-settings-title">Dashboard profile</h3><p>Export the complete layout as JSON or restore it in another browser.</p></div>
+            <div class="profile-actions"><button id="export-dashboard-button" class="secondary" type="button">Export JSON</button><button id="import-dashboard-button" class="secondary" type="button">Import JSON</button><input id="import-dashboard-file" type="file" accept="application/json,.json" hidden></div>
+            <p id="profile-status" class="settings-status" aria-live="polite"></p>
+          </section>
+        </div>
+        <footer class="settings-footer"><button id="reset-dashboard-button" class="secondary" type="button">Reset defaults</button><button id="done-settings-button" type="button">Done</button></footer>
+      </div>
+    </dialog>
+
     <footer class="site-footer compact-footer">
-      <span>Mole → MavMole relay → Digger</span>
-      <span>Raw binary transport</span>
+      <span>Mission Planner → Mole · Relay optional</span>
+      <span>Decoded locally · Nothing stored</span>
     </footer>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/js/logger.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/mavlink-dialect.js"></script>
+    <script src="/js/mavlink-telemetry.js"></script>
+    <script src="/js/telemetry-dashboard.js"></script>
     <script src="/js/mole.js"></script>
   </body>
 </html>

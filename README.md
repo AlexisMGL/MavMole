@@ -8,7 +8,8 @@ Prototype pour relayer un flux MAVLink binaire depuis Mission Planner vers un se
 Mission Planner / SITL
         │ ws://127.0.0.1:56781/websocket/raw
         ▼
-Navigateur Mole
+Navigateur Mole + dashboard local
+        │ forwarding optionnel
         │ wss://<service>/ws?role=mole
         ▼
 MavMole sur Render
@@ -30,25 +31,16 @@ Navigateur Digger
 - la configuration complète du dashboard peut être exportée et importée en JSON ;
 - les pages Mole et Digger affichent en temps réel le nombre de viewers connectés au stream ;
 - la carte charge automatiquement le fond satellite Esri World Imagery utilisé par le GNSS dashboard, sans clé ni configuration ;
+- la page Mole tente automatiquement la connexion Mission Planner à son ouverture, sans activer le forwarding ;
+- la connexion locale et le forwarding sont indépendants : arrêter ou perdre le relais ne coupe pas le dashboard Mole ;
+- les dashboards Mole et Digger proposent aussi GNSS (POS/GPS1/GPS2), Misc (IMU, airspeed et courant) et température ESC avec historique et prévision ;
 - les compteurs de transport et le dernier paquet brut restent disponibles dans les diagnostics.
-
-## Identité visuelle
-
-La planche graphique fournie est conservée dans `assets/source/` et découpée en assets nommés dans `assets/brand`, `assets/icons`, `assets/banners`, `assets/backgrounds`, `assets/mascot` et `assets/animations`. Les animations sont disponibles sous forme de huit PNG individuels et de sprite strips directement utilisables en CSS.
-
-Pour reconstruire les découpes de manière déterministe sous Windows :
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\extract-assets.ps1
-```
 
 Pour lancer le serveur et capturer automatiquement les vues desktop/mobile avec Edge headless :
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\capture-ui.ps1
 ```
-
-Le détail des fichiers et dimensions est dans `assets/README.md`.
 
 Quand un second Mole se connecte, il remplace la source précédente et l’ancienne connexion reçoit le code de fermeture `4001`. Les connexions Digger sont cumulées et reçoivent toutes le même flux.
 
@@ -65,7 +57,7 @@ npm start
 Ouvrir ensuite :
 
 - `http://localhost:3000/dig` dans le navigateur Digger et cliquer sur **Connect** ;
-- `http://localhost:3000/mole` sur le PC de Mission Planner et cliquer sur **Connect and forward**.
+- `http://localhost:3000/mole` sur le PC de Mission Planner. La page tente la connexion locale automatiquement ; cliquer sur **Start forwarding** uniquement pour publier le flux.
 
 L’état technique du service est disponible sur `http://localhost:3000/healthz`.
 
@@ -90,9 +82,9 @@ Entrer `ws://127.0.0.1:5863` sur la page Mole. Cette source envoie une télémé
 1. Démarrer une simulation SITL dans Mission Planner et attendre que la télémétrie arrive.
 2. Ouvrir les outils de développement du navigateur avec F12, onglet **Console**.
 3. Ouvrir la page Digger et cliquer sur **Connect**.
-4. Ouvrir la page Mole sur le PC qui exécute Mission Planner.
-5. Utiliser `ws://127.0.0.1:56781/websocket/raw`, puis cliquer sur **Connect and forward**.
-6. Vérifier que les deux connexions sont vertes et que les compteurs des deux pages augmentent.
+4. Ouvrir la page Mole sur le PC qui exécute Mission Planner : elle tente automatiquement `ws://127.0.0.1:56781/websocket/raw` en mode local uniquement.
+5. Vérifier que les widgets Mole reçoivent la télémétrie, puis cliquer sur **Start forwarding**.
+6. Vérifier que le relais et le Digger sont verts et que les compteurs des deux pages augmentent.
 
 Le code actuel de Mission Planner expose son flux WebSocket brut sur le port `56781`, au chemin `/websocket/raw` ([source Mission Planner](https://github.com/ArduPilot/MissionPlanner/blob/master/Utilities/httpserver.cs)). Si ton installation ou un plugin expose déjà `ws://127.0.0.1:5863`, remplace simplement l’URL dans le champ : elle n’est pas codée en dur.
 

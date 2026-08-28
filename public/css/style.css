@@ -117,10 +117,16 @@ input {
   text-decoration: none;
 }
 
-.brand img {
-  width: 34px;
-  height: 34px;
-  object-fit: contain;
+.brand-mark {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .header-note {
@@ -136,12 +142,8 @@ input {
 }
 
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  align-items: center;
-  gap: clamp(40px, 7vw, 96px);
-  min-height: 500px;
-  padding-bottom: 84px;
+  min-height: 390px;
+  padding: 64px 0 84px;
 }
 
 .hero-content {
@@ -188,24 +190,6 @@ input {
 .relay-flow i {
   color: var(--line-strong);
   font-style: normal;
-}
-
-.hero-visual {
-  display: grid;
-  width: min(100%, 360px);
-  aspect-ratio: 1;
-  place-items: center;
-  justify-self: end;
-  overflow: hidden;
-  border: 1px solid var(--line);
-  border-radius: 50%;
-  background: var(--surface);
-}
-
-.hero-visual img {
-  width: 138%;
-  max-width: none;
-  margin: 15% -19% -5%;
 }
 
 .roles-section {
@@ -261,17 +245,21 @@ input {
 }
 
 .role-icon {
+  display: grid;
   width: 66px;
   height: 66px;
-  padding: 4px;
-  object-fit: contain;
+  place-items: center;
   border: 1px solid var(--line);
   border-radius: 16px;
+  color: var(--accent);
   background: var(--canvas);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
 }
 
 .role-icon.molehill-icon {
-  padding: 9px 13px;
+  color: var(--ink-soft);
 }
 
 .role-card-copy p {
@@ -572,6 +560,33 @@ input:disabled {
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 24px;
+}
+
+.forward-control {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+
+.forward-control > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.forward-control strong {
+  font-size: 0.82rem;
+}
+
+.forward-control span {
+  color: var(--ink-soft);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
+.mole-local-dashboard {
+  margin-top: 22px;
 }
 
 button {
@@ -1442,6 +1457,385 @@ pre {
   transition: width 220ms ease;
 }
 
+.advanced-dashboard-widget {
+  grid-column: 1 / -1;
+}
+
+.gnss-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+  gap: 18px;
+}
+
+.gnss-map-shell {
+  position: relative;
+  min-height: 390px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #e8ece5;
+}
+
+.gnss-map {
+  position: absolute;
+  inset: 0;
+}
+
+.gnss-map-marker {
+  border: 0;
+  background: transparent;
+}
+
+.gnss-marker-symbol {
+  display: block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: var(--gnss-source);
+  box-shadow: 0 2px 7px rgba(10, 21, 15, 0.48);
+}
+
+.gnss-map-legend {
+  position: absolute;
+  z-index: 500;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(24, 30, 24, 0.14);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 4px 15px rgba(26, 34, 27, 0.12);
+  font-size: 0.63rem;
+  font-weight: 780;
+}
+
+.gnss-map-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gnss-map-legend span::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  content: "";
+}
+
+.gnss-map-legend [data-source="pos"]::before,
+.gnss-source-card[data-source="pos"] {
+  --source-colour: #3478c7;
+}
+
+.gnss-map-legend [data-source="gps1"]::before,
+.gnss-source-card[data-source="gps1"] {
+  --source-colour: #e57b25;
+}
+
+.gnss-map-legend [data-source="gps2"]::before,
+.gnss-source-card[data-source="gps2"] {
+  --source-colour: #2e9b68;
+}
+
+.gnss-map-legend span::before {
+  background: var(--source-colour);
+}
+
+.gnss-details {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+
+.gnss-source-card {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--source-colour);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.gnss-source-card > div,
+.advanced-chart-heading,
+.misc-chart-card header,
+.misc-chart-card footer,
+.esc-chart-labels {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gnss-source-card strong {
+  color: var(--source-colour);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.gnss-source-card span,
+.advanced-status,
+.misc-chart-card header span {
+  color: var(--ink-soft);
+  font-size: 0.63rem;
+  font-weight: 680;
+}
+
+.gnss-source-card span[data-state="live"],
+.advanced-status[data-state="live"],
+.misc-chart-card header span[data-state="live"] {
+  color: var(--success);
+}
+
+.gnss-source-card span[data-state="stale"],
+.advanced-status[data-state="stale"],
+.misc-chart-card header span[data-state="stale"] {
+  color: var(--warning);
+}
+
+.misc-chart-card header span[data-state="alert"] {
+  color: #b53a2c;
+}
+
+.gnss-source-card p {
+  margin: 7px 0 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gnss-offsets,
+.esc-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--line);
+}
+
+.gnss-offsets > div,
+.esc-summary > div {
+  padding: 10px 12px;
+  background: var(--canvas);
+}
+
+.gnss-offsets dt,
+.esc-summary dt {
+  color: var(--ink-soft);
+  font-size: 0.58rem;
+  font-weight: 760;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.gnss-offsets dd,
+.esc-summary dd {
+  margin: 4px 0 0;
+  font-size: 0.9rem;
+  font-weight: 780;
+}
+
+.advanced-chart-block {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.advanced-chart-heading {
+  margin-bottom: 9px;
+  color: var(--ink-soft);
+  font-size: 0.64rem;
+}
+
+.advanced-chart-heading strong {
+  color: var(--ink);
+  font-size: 0.68rem;
+}
+
+.advanced-line-chart {
+  display: block;
+  width: 100%;
+  overflow: visible;
+  border-bottom: 1px solid var(--line);
+  background-image: linear-gradient(to bottom, transparent 49%, rgba(89, 101, 88, 0.09) 50%, transparent 51%);
+}
+
+.advanced-chart-line,
+.esc-series {
+  fill: none;
+  stroke: var(--dashboard-accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+  vector-effect: non-scaling-stroke;
+}
+
+.chart-threshold,
+.temperature-threshold {
+  stroke: #c47c48;
+  stroke-dasharray: 5 4;
+  stroke-width: 1.25;
+  vector-effect: non-scaling-stroke;
+}
+
+.misc-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.misc-chart-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.misc-chart-card header {
+  align-items: flex-start;
+  margin-bottom: 13px;
+}
+
+.misc-chart-card header > div {
+  display: grid;
+  gap: 3px;
+}
+
+.misc-chart-card header strong {
+  font-size: 0.8rem;
+}
+
+.misc-chart-card output {
+  color: var(--dashboard-accent);
+  font-size: 1rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.misc-chart-card footer {
+  margin-top: 10px;
+  color: var(--ink-soft);
+  font-size: 0.62rem;
+}
+
+.misc-chart-card footer label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.misc-chart-card input {
+  width: 58px;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--ink);
+  background: var(--surface);
+  font: inherit;
+}
+
+.esc-value-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.esc-value-grid > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.esc-value-grid span {
+  color: var(--ink-soft);
+  font-size: 0.65rem;
+  font-weight: 760;
+}
+
+.esc-value-grid strong {
+  font-size: 1.05rem;
+}
+
+.esc-value-grid [data-state="warning"] {
+  border-color: #d9a442;
+  background: #fff8e8;
+}
+
+.esc-value-grid [data-state="critical"] {
+  border-color: #d36a5c;
+  color: #a82e25;
+  background: #fff1ef;
+}
+
+.esc-value-grid [data-state="stale"] {
+  opacity: 0.58;
+}
+
+.esc-chart-wrap {
+  padding: 14px 14px 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--canvas);
+}
+
+.esc-chart {
+  height: 190px;
+}
+
+.esc-forecast-zone {
+  fill: rgba(184, 98, 56, 0.06);
+}
+
+.temperature-threshold.warning {
+  stroke: #c58b21;
+}
+
+.temperature-threshold.critical {
+  stroke: #b43b30;
+}
+
+.esc-series-1 { stroke: #3478c7; }
+.esc-series-2 { stroke: #e57b25; }
+.esc-series-3 { stroke: #2e9b68; }
+.esc-series-4 { stroke: #8b5bb5; }
+
+.esc-forecast {
+  stroke-dasharray: 5 4;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.esc-chart-labels {
+  margin-top: 7px;
+  color: var(--ink-soft);
+  font-size: 0.58rem;
+}
+
+.esc-chart-labels strong {
+  margin-left: auto;
+}
+
+.esc-summary {
+  margin-top: 14px;
+}
+
 .custom-chart-widget {
   grid-column: 1 / -1;
   min-height: 270px;
@@ -2248,6 +2642,41 @@ button.close-button {
 
   .hex-chip {
     display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .gnss-layout,
+  .misc-chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .gnss-map-shell {
+    min-height: 340px;
+  }
+}
+
+@media (max-width: 520px) {
+  .gnss-map-shell {
+    min-height: 280px;
+  }
+
+  .gnss-offsets,
+  .esc-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .esc-value-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .esc-chart {
+    height: 145px;
+  }
+
+  .misc-chart-card footer {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

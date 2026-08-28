@@ -5,13 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Share a raw MAVLink WebSocket stream between two browsers.">
     <title>MavMole — Share MAVLink anywhere</title>
-    <link rel="icon" href="/assets/icons/mole-circle.png" type="image/png">
+    <link rel="icon" href="data:,">
     <link rel="stylesheet" href="/css/style.css">
   </head>
   <body class="home-page">
     <header class="site-header">
       <a class="brand" href="/" aria-label="MavMole home">
-        <img src="/assets/icons/mole-small.png" alt="">
+        <span class="brand-mark" aria-hidden="true">M</span>
         <span>MavMole</span>
       </a>
       <span class="header-note">Raw MAVLink relay</span>
@@ -22,7 +22,7 @@
         <div class="hero-content">
           <p class="eyebrow">Browser-to-browser relay</p>
           <h1>Share MAVLink.<br><span>Anywhere.</span></h1>
-          <p class="hero-copy">Send Mission Planner's raw stream to another browser through one direct, lightweight tunnel.</p>
+          <p class="hero-copy">Inspect Mission Planner locally, build your own telemetry dashboard and optionally share the raw stream with remote viewers.</p>
 
           <div class="relay-flow" aria-label="Mission Planner data travels through MavMole to a viewer">
             <span>Mission Planner</span>
@@ -33,9 +33,6 @@
           </div>
         </div>
 
-        <div class="hero-visual" aria-hidden="true">
-          <img src="/assets/mascot/mole-transparent.png" alt="">
-        </div>
       </section>
 
       <section class="roles-section" aria-labelledby="choose-role-title">
@@ -49,21 +46,21 @@
 
         <div class="role-grid">
           <a class="role-card" href="/mole">
-            <img class="role-icon" src="/assets/icons/mole-circle.png" alt="">
+            <span class="role-icon" aria-hidden="true">TX</span>
             <div class="role-card-copy">
               <span class="role-badge">Publisher</span>
               <h3>Be a Mole</h3>
-              <p>Connect Mission Planner on this computer and forward its raw binary stream.</p>
+              <p>Auto-connect Mission Planner, inspect local widgets and forward only when you choose.</p>
             </div>
             <span class="card-arrow" aria-hidden="true">→</span>
           </a>
 
           <a class="role-card" href="/dig">
-            <img class="role-icon molehill-icon" src="/assets/icons/molehill.png" alt="">
+            <span class="role-icon molehill-icon" aria-hidden="true">RX</span>
             <div class="role-card-copy">
               <span class="role-badge">Viewer</span>
               <h3>Dig a Molehill</h3>
-              <p>Join the relay, inspect live counters and confirm that binary frames arrive.</p>
+              <p>Join the relay and view a customizable MAVLink telemetry dashboard.</p>
             </div>
             <span class="card-arrow" aria-hidden="true">→</span>
           </a>
