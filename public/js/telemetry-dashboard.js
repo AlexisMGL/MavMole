@@ -992,7 +992,8 @@
       const metric = this.miscState[key];
       const elements = this.elements.misc[key];
       const threshold = this.settings.miscThresholds[key];
-      elements.threshold.value = threshold;
+      // This renderer runs for every telemetry update; keep it away from the
+      // editable input so an in-progress value such as 1.22 is not clobbered.
       elements.value.textContent = Number.isFinite(metric.value)
         ? `${metric.value.toFixed(definition.decimals)} ${definition.unit}`
         : "—";

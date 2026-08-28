@@ -66,6 +66,11 @@ test("serves the app and relays a binary frame end to end", async (context) => {
   assert.equal(stylesheetResponse.status, 200);
   assert.match(stylesheetResponse.headers.get("content-type"), /^text\/css/);
 
+  const iconResponse = await fetch(`${httpUrl}/assets/icons/mole-circle.png`);
+  assert.equal(iconResponse.status, 200);
+  assert.match(iconResponse.headers.get("content-type"), /^image\/png/);
+  assert.ok((await iconResponse.arrayBuffer()).byteLength > 0);
+
   const dialectResponse = await fetch(`${httpUrl}/js/mavlink-dialect.js`);
   assert.equal(dialectResponse.status, 200);
   assert.match(dialectResponse.headers.get("content-type"), /javascript/);

@@ -117,16 +117,10 @@ input {
   text-decoration: none;
 }
 
-.brand-mark {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  border-radius: 9px;
-  color: #fff;
-  background: var(--accent);
-  font-size: 0.78rem;
-  font-weight: 850;
+.brand img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
 }
 
 .header-note {
@@ -245,21 +239,17 @@ input {
 }
 
 .role-icon {
-  display: grid;
   width: 66px;
   height: 66px;
-  place-items: center;
+  padding: 4px;
+  object-fit: contain;
   border: 1px solid var(--line);
   border-radius: 16px;
-  color: var(--accent);
   background: var(--canvas);
-  font-size: 0.72rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
 }
 
 .role-icon.molehill-icon {
-  color: var(--ink-soft);
+  padding: 9px 13px;
 }
 
 .role-card-copy p {
