@@ -1,0 +1,40 @@
+(function registerHomeTranslations() {
+  "use strict";
+  const entries = [
+    ["Your flight data, a little closer. Share live MAVLink telemetry with your team through MavMole.", "Vos données de vol, à portée de main. Partagez la télémétrie MAVLink en direct avec votre équipe grâce à MavMole.", "Ihre Flugdaten, ein Stück näher. Teilen Sie MAVLink-Telemetrie live mit Ihrem Team über MavMole."],
+    ["MavMole — Share MAVLink anywhere", "MavMole — Partagez MAVLink partout", "MavMole — MAVLink überall teilen"],
+    ["Skip to content", "Aller au contenu", "Zum Inhalt springen"],
+    ["A closer connection to your flight", "Votre vol, à portée de main", "Näher an Ihrem Flug"],
+    ["Share MAVLink.", "Partagez MAVLink.", "MAVLink teilen."],
+    ["Anywhere.", "Partout.", "Überall."],
+    ["Your aircraft. Your team. One shared view. Bring live Mission Planner telemetry to any browser, wherever the flight takes you.", "Votre aéronef. Votre équipe. Une même vue. Retrouvez la télémétrie Mission Planner en direct dans votre navigateur, où que le vol vous mène.", "Ihr Fluggerät. Ihr Team. Ein gemeinsamer Blick. Live-Telemetrie aus Mission Planner in jedem Browser – wohin der Flug Sie auch führt."],
+    ["Join as a viewer", "Rejoindre comme viewer", "Als Zuschauer beitreten"],
+    ["No account. No installation. Just a connection.", "Sans compte. Sans installation. Juste une connexion.", "Kein Konto. Keine Installation. Einfach verbinden."],
+    ["Illustration of a Mole sharing telemetry with connected viewers", "Illustration d’une Mole partageant sa télémétrie avec des viewers", "Illustration einer Mole, die Telemetrie mit Zuschauern teilt"],
+    ["MAVMOLE NETWORK", "RÉSEAU MAVMOLE", "MAVMOLE-NETZWERK"],
+    ["How it connects", "Comment ça marche", "So funktioniert’s"],
+    ["Connected, anywhere", "Connecté, partout", "Überall verbunden"],
+    ["One tunnel. A shared perspective.", "Un tunnel. Une même perspective.", "Ein Tunnel. Ein gemeinsamer Blick."],
+    ["Make the connection", "Créez le lien", "Verbindung schaffen"],
+    ["Every flight has a team.", "Derrière chaque vol, une équipe.", "Hinter jedem Flug steht ein Team."],
+    ["Start a stream, add an aircraft, or follow along.", "Lancez un flux, ajoutez un aéronef ou suivez le vol.", "Stream starten, Fluggerät hinzufügen oder live dabei sein."],
+    ["Find your place in the tunnel.", "À chacun sa place dans le tunnel.", "Finden Sie Ihren Platz im Tunnel."],
+    ["01 / Publish", "01 / Partager", "01 / Senden"],
+    ["02 / Collaborate", "02 / Collaborer", "02 / Mitwirken"],
+    ["03 / Explore", "03 / Explorer", "03 / Entdecken"],
+    ["Share your Mission Planner stream. Keep it public or make it private with a password.", "Partagez votre flux Mission Planner. En accès public ou privé, protégé par mot de passe.", "Teilen Sie Ihren Mission-Planner-Stream. Öffentlich oder privat mit Passwortschutz."],
+    ["Your flight, connected", "Votre vol, connecté", "Ihr Flug, verbunden"],
+    ["Add your aircraft to an existing tunnel and bring the whole fleet into view.", "Ajoutez votre aéronef à un tunnel existant et retrouvez toute la flotte sur une même carte.", "Fügen Sie Ihr Fluggerät einem bestehenden Tunnel hinzu und behalten Sie die gesamte Flotte im Blick."],
+    ["Part of something bigger", "Ensemble, plus loin", "Gemeinsam weiter"],
+    ["Watch the flight unfold with live maps and a dashboard that feels like your own.", "Suivez le vol sur des cartes en direct et un tableau de bord à votre image.", "Verfolgen Sie den Flug mit Live-Karten und einem Dashboard ganz nach Ihren Wünschen."],
+    ["A front-row view", "Le vol aux premières loges", "In der ersten Reihe"],
+    ["Ephemeral by design", "Éphémère par nature", "Bewusst flüchtig"],
+    ["Your telemetry is never stored", "Votre télémétrie n’est jamais enregistrée", "Ihre Telemetrie wird nie gespeichert"],
+    ["A little closer. Wherever you fly.", "Un peu plus proches. Où que vous voliez.", "Ein Stück näher. Wohin Sie auch fliegen."],
+    ["MAVLink, together.", "MAVLink, ensemble.", "MAVLink, gemeinsam."],
+  ];
+  window.MavMoleI18n.register({
+    fr: Object.fromEntries(entries.map(([key, fr]) => [key, fr])),
+    de: Object.fromEntries(entries.map(([key, , de]) => [key, de])),
+  });
+})();
