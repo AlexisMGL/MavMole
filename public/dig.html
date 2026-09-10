@@ -8,6 +8,7 @@
     <link rel="icon" href="/assets/icons/molehill.png" type="image/png">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/ui.js" defer></script>
   </head>
   <body class="tool-page digger-page">
     <header class="app-header">
@@ -18,6 +19,7 @@
       <nav aria-label="Primary navigation">
         <a class="text-link" href="/">Home</a>
         <a class="mode-link" href="/mole"><span aria-hidden="true">←</span> Open Mole</a>
+        <label class="language-picker"><span class="sr-only" data-i18n="Language">Language</span><select data-language-select aria-label="Language"><option value="en" lang="en">English</option><option value="fr" lang="fr">Français</option><option value="de" lang="de">Deutsch</option></select></label>
       </nav>
     </header>
 
@@ -74,6 +76,19 @@
       </section>
 
       <div id="mole-notifications" class="mole-notifications" aria-live="polite" aria-atomic="false"></div>
+
+      <section class="panel location-sharing-panel" aria-labelledby="location-sharing-heading">
+        <div>
+          <p class="eyebrow">YOUR LOCATION</p>
+          <h2 id="location-sharing-heading">Let your Mole know where you are</h2>
+          <p class="muted">Optional: share your device location only with the Moles in this tunnel. Sharing stops when you disconnect.</p>
+        </div>
+        <div class="location-sharing-actions">
+          <button id="share-location-button" class="button secondary" type="button" disabled>Share my location</button>
+          <button id="stop-sharing-location-button" class="button ghost" type="button" hidden>Stop sharing</button>
+        </div>
+        <p id="location-sharing-status" class="muted" role="status" aria-live="polite">Join a tunnel to share your location.</p>
+      </section>
 
       <section class="fleet-overview" aria-labelledby="fleet-overview-title">
         <div class="dashboard-heading">
@@ -515,8 +530,10 @@
       <span>Decoded locally · Nothing stored</span>
     </footer>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="/js/i18n.js"></script>
     <script src="/js/logger.js"></script>
     <script src="/js/app.js"></script>
+    <script src="/js/viewer-map.js"></script>
     <script src="/js/mavlink-dialect.js"></script>
     <script src="/js/mavlink-telemetry.js"></script>
     <script src="/js/telemetry-dashboard.js"></script>

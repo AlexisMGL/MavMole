@@ -126,6 +126,7 @@ test("serves secured app assets and relays an authenticated public tunnel", asyn
   assert.equal(homeResponse.status, 200);
   assert.equal(homeResponse.headers.get("x-content-type-options"), "nosniff");
   assert.match(homeResponse.headers.get("content-security-policy"), /frame-ancestors 'none'/);
+  assert.match(homeResponse.headers.get("permissions-policy"), /geolocation=\(self\)/);
 
   const iconResponse = await fetch(httpUrl + "/assets/icons/mole-circle.png");
   assert.equal(iconResponse.status, 200);
@@ -273,4 +274,83 @@ test("announces a new Mole only after it carries a MAVLink frame", async (contex
   secondMole.socket.send(mavlinkHeartbeat(4), { binary: true });
   const announcement = await secondActive;
   assert.equal(announcement.label, secondMole.joined.label);
+});
+
+test("viewer locations are opt-in, scoped to tunnel Moles, and removed on stop or disconnect", async (context) => {
+  const service = createMavMoleServer();
+  await new Promise((resolve) => service.httpServer.listen(0, "127.0.0.1", resolve));
+  context.after(() => closeService(service));
+  const port = service.httpServer.address().port;
+  const wsUrl = "ws://127.0.0.1:" + port;
+  const config = { stream: "location-private", private: true, password: "location-test" };
+  const mole = await openAndJoin(wsUrl + "/ws?role=mole", config);
+  const viewer = await openAndJoin(wsUrl + "/ws?role=digger", config);
+  const peer = await openAndJoin(wsUrl + "/ws?role=digger", config);
+  const otherMole = await openAndJoin(wsUrl + "/ws?role=mole", { stream: "other-location" });
+  const sockets = [mole.socket, viewer.socket, peer.socket, otherMole.socket];
+  context.after(() => sockets.forEach((socket) => socket.close()));
+  assert.deepEqual(mole.joined.viewerLocations, []);
+  assert.equal("viewerLocations" in viewer.joined, false);
+  const leaked = [];
+  for (const socket of [peer.socket, otherMole.socket]) {
+    socket.on("message", (data, isBinary) => {
+      if (!isBinary && JSON.parse(data).type.startsWith("viewer.location.")) leaked.push(JSON.parse(data));
+    });
+  }
+  const location = { latitude: 48.8566, longitude: 2.3522, accuracy: 25 };
+  const share = () => viewer.socket.send(JSON.stringify({ type: "viewer.location.share", location }));
+  let received = nextControl(mole.socket, (message) => message.type === "viewer.location.updated");
+  share();
+  const shared = await received;
+  assert.equal(shared.latitude, location.latitude);
+  assert.equal(shared.accuracy, location.accuracy);
+  assert.ok(shared.viewerId);
+  assert.ok(shared.updatedAt);
+
+  const lateMole = await openAndJoin(wsUrl + "/ws?role=mole", { ...config, mode: "join" });
+  sockets.push(lateMole.socket);
+  assert.equal(lateMole.joined.viewerLocations.length, 1);
+  assert.equal(lateMole.joined.viewerLocations[0].viewerId, shared.viewerId);
+
+  const denied = nextControl(mole.socket, (message) => message.type === "viewer.location.error");
+  mole.socket.send(JSON.stringify({ type: "viewer.location.share", location }));
+  assert.equal((await denied).code, "FORBIDDEN");
+  const invalid = nextControl(viewer.socket, (message) => message.type === "viewer.location.error");
+  viewer.socket.send(JSON.stringify({ type: "viewer.location.share", location: { ...location, latitude: 100 } }));
+  assert.equal((await invalid).code, "INVALID_LOCATION");
+
+  received = nextControl(mole.socket, (message) => message.type === "viewer.location.removed");
+  viewer.socket.send(JSON.stringify({ type: "viewer.location.stop" }));
+  assert.equal((await received).viewerId, shared.viewerId);
+  assert.deepEqual(service.connections.viewerLocations(
+    Array.from(service.websocketServer.clients).find((socket) => service.connections.metadata(socket)?.sourceId === mole.joined.sourceId)
+  ), []);
+
+  received = nextControl(mole.socket, (message) => message.type === "viewer.location.updated");
+  share();
+  await received;
+  received = nextControl(mole.socket, (message) => message.type === "viewer.location.removed");
+  viewer.socket.close();
+  assert.equal((await received).viewerId, shared.viewerId);
+  const reconnected = await openAndJoin(wsUrl + "/ws?role=digger", config);
+  sockets.push(reconnected.socket);
+  const finalMole = await openAndJoin(wsUrl + "/ws?role=mole", { ...config, mode: "join" });
+  sockets.push(finalMole.socket);
+  assert.deepEqual(finalMole.joined.viewerLocations, []);
+  assert.deepEqual(leaked, []);
+  for (const endpoint of ["/api/streams", "/api/stats", "/healthz"]) {
+    const response = await fetch("http://127.0.0.1:" + port + endpoint);
+    assert.doesNotMatch(await response.text(), /latitude|longitude|viewerId/);
+  }
+});
+
+test("unauthenticated connections cannot publish viewer locations", async (context) => {
+  const service = createMavMoleServer();
+  await new Promise((resolve) => service.httpServer.listen(0, "127.0.0.1", resolve));
+  context.after(() => closeService(service));
+  const socket = await openWebSocket("ws://127.0.0.1:" + service.httpServer.address().port + "/ws?role=digger");
+  const closed = new Promise((resolve) => socket.once("close", resolve));
+  socket.send(JSON.stringify({ type: "viewer.location.share", location: { latitude: 1, longitude: 1, accuracy: 1 } }));
+  assert.equal(await closed, 4003);
+  assert.deepEqual(service.connections.snapshot(), { streams: 0, moles: 0, viewers: 0 });
 });

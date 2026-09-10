@@ -1,6 +1,107 @@
 (function createTelemetryDashboard(global) {
   "use strict";
 
+  const translations = [
+    ["Position", "Position", "Position"],
+    ["Airspeed", "Vitesse air", "Fluggeschwindigkeit"],
+    ["AGL altitude", "Altitude sol", "Höhe über Grund"],
+    ["Battery", "Batterie", "Akku"],
+    ["GNSS dashboard", "Tableau de bord GNSS", "GNSS-Dashboard"],
+    ["Misc dashboard", "Mesures complémentaires", "Weitere Messwerte"],
+    ["ESC temperature", "Température des ESC", "ESC-Temperatur"],
+    ["Leaflet could not be loaded from the map provider.", "Impossible de charger Leaflet depuis le fournisseur de carte.", "Leaflet konnte nicht vom Kartenanbieter geladen werden."],
+    ["Esri World Imagery did not return map tiles.", "Esri World Imagery n’a renvoyé aucune tuile de carte.", "Esri World Imagery hat keine Kartenkacheln geliefert."],
+    ["Satellite", "Satellite", "Satellit"],
+    ["Satellite unavailable", "Satellite indisponible", "Satellitenkarte nicht verfügbar"],
+    ["Satellite imagery could not load", "Impossible de charger les images satellite", "Satellitenbilder konnten nicht geladen werden"],
+    ["{error} Check the internet connection and retry.", "{error} Vérifiez la connexion Internet et réessayez.", "{error} Prüfen Sie die Internetverbindung und versuchen Sie es erneut."],
+    ["Aircraft", "Aéronef", "Fluggerät"],
+    ["Leaflet is unavailable", "Leaflet est indisponible", "Leaflet ist nicht verfügbar"],
+    ["GNSS map unavailable: {error}", "Carte GNSS indisponible : {error}", "GNSS-Karte nicht verfügbar: {error}"],
+    ["Waiting for GNSS positions", "En attente des positions GNSS", "Warten auf GNSS-Positionen"],
+    ["Zoom in", "Zoom avant", "Vergrößern"],
+    ["Zoom out", "Zoom arrière", "Verkleinern"],
+    ["Waiting for position", "En attente de position", "Warten auf Position"],
+    ["No data", "Aucune donnée", "Keine Daten"],
+    ["fix {fix}", "fix {fix}", "Fix {fix}"],
+    ["{count} sats", "{count} sat.", "{count} Sat."],
+    ["{seconds}s old", "Il y a {seconds} s", "Vor {seconds} s"],
+    ["Live", "En direct", "Live"],
+    ["{count} satellites", "{count} satellites", "{count} Satelliten"],
+    ["Waiting for GPS2", "En attente de GPS2", "Warten auf GPS2"],
+    ["Waiting for MAVLink", "En attente de MAVLink", "Warten auf MAVLink"],
+    ["Above threshold", "Seuil dépassé", "Über dem Schwellenwert"],
+    ["{seconds} s longest", "Durée maximale : {seconds} s", "Längste Dauer: {seconds} s"],
+    ["No rising trend", "Aucune tendance à la hausse", "Kein Temperaturanstieg"],
+    ["Waiting for ESC_TELEMETRY_1_TO_4", "En attente de ESC_TELEMETRY_1_TO_4", "Warten auf ESC_TELEMETRY_1_TO_4"],
+    ["Last update {seconds}s ago", "Dernière mise à jour il y a {seconds} s", "Letzte Aktualisierung vor {seconds} s"],
+    ["60s history · 20s linear forecast", "Historique de 60 s · Prévision linéaire de 20 s", "60 s Verlauf · 20 s lineare Prognose"],
+    ["Telemetry live", "Télémétrie en direct", "Live-Telemetrie"],
+    ["No airspeed message", "Aucun message de vitesse air", "Keine Fluggeschwindigkeitsdaten"],
+    ["No AGL source", "Aucune source d’altitude sol", "Keine Quelle für die Höhe über Grund"],
+    ["No battery message", "Aucun message de batterie", "Keine Akkudaten"],
+    ["Relative to home", "Par rapport au point de départ", "Relativ zum Startpunkt"],
+    ["Terrain estimate", "Estimation du terrain", "Geländeschätzung"],
+    ["Terrain", "Terrain", "Gelände"],
+    ["Downward rangefinder", "Télémètre orienté vers le sol", "Nach unten gerichteter Entfernungsmesser"],
+    ["Rangefinder", "Télémètre", "Entfernungsmesser"],
+    ["Waiting for field", "En attente du champ", "Warten auf Datenfeld"],
+    ["TIME", "TEMPS", "ZEIT"],
+    ["GAUGE", "JAUGE", "ANZEIGE"],
+    ["VALUE", "VALEUR", "WERT"],
+    ["Time based graph", "Graphique temporel", "Zeitdiagramm"],
+    ["Waiting for {field}", "En attente de {field}", "Warten auf {field}"],
+    ["{seconds}s window", "Fenêtre de {seconds} s", "Zeitfenster: {seconds} s"],
+    ["Move {widget} up", "Monter {widget}", "{widget} nach oben verschieben"],
+    ["Move {widget} down", "Descendre {widget}", "{widget} nach unten verschieben"],
+    ["Delete {widget}", "Supprimer {widget}", "{widget} löschen"],
+    ["Connect and receive MAVLink first", "Connectez-vous pour recevoir MAVLink", "Zuerst verbinden und MAVLink empfangen"],
+    ["Select a MAVLink field", "Sélectionner un champ MAVLink", "MAVLink-Datenfeld auswählen"],
+    ["Select a field received from the MAVLink stream.", "Sélectionnez un champ reçu dans le flux MAVLink.", "Wählen Sie ein Datenfeld aus dem empfangenen MAVLink-Datenstrom aus."],
+    ["The dashboard is limited to {count} custom widgets.", "Le tableau de bord est limité à {count} widgets personnalisés.", "Das Dashboard ist auf {count} eigene Widgets begrenzt."],
+    ["This widget configuration is invalid.", "La configuration de ce widget est invalide.", "Diese Widget-Konfiguration ist ungültig."],
+    ["{widget} added.", "{widget} ajouté.", "{widget} hinzugefügt."],
+    ["No custom MAVLink widgets yet.", "Aucun widget MAVLink personnalisé pour le moment.", "Noch keine eigenen MAVLink-Widgets."],
+    ["Value", "Valeur", "Wert"],
+    ["Chart", "Graphique", "Diagramm"],
+    ["Gauge", "Jauge", "Anzeige"],
+    ["Dashboard profile exported.", "Profil du tableau de bord exporté.", "Dashboard-Profil exportiert."],
+    ["Dashboard profile is too large.", "Le profil du tableau de bord est trop volumineux.", "Das Dashboard-Profil ist zu groß."],
+    ["This is not a MavMole dashboard profile.", "Ce fichier n’est pas un profil de tableau de bord MavMole.", "Diese Datei ist kein MavMole-Dashboard-Profil."],
+    ["The dashboard profile contains invalid JSON.", "Le profil du tableau de bord contient du JSON invalide.", "Das Dashboard-Profil enthält ungültiges JSON."],
+    ["The dashboard profile could not be read.", "Impossible de lire le profil du tableau de bord.", "Das Dashboard-Profil konnte nicht gelesen werden."],
+    ["Imported {count} custom widgets.", "{count} widgets personnalisés importés.", "{count} eigene Widgets importiert."],
+    ["MAVLink data must be an ArrayBuffer or typed array.", "Les données MAVLink doivent être un ArrayBuffer ou un tableau typé.", "MAVLink-Daten müssen ein ArrayBuffer oder ein typisiertes Array sein."],
+  ];
+  global.MavMoleI18n?.register({
+    fr: Object.fromEntries(translations.map(([source, french]) => [source, french])),
+    de: Object.fromEntries(translations.map(([source, _french, german]) => [source, german])),
+  });
+  const t = (source, values = {}) => global.MavMoleI18n?.t(source, values)
+    ?? source.replace(/\{(\w+)\}/g, (match, key) => values[key] ?? match);
+  const number = (value, decimals = 0) => global.MavMoleI18n?.number(value, {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping: false,
+  }) ?? value.toFixed(decimals);
+  const bindText = (element, source, values) => {
+    if (global.MavMoleI18n?.bind) {
+      global.MavMoleI18n.bind(element, source, values);
+    } else {
+      element.textContent = t(source, values);
+    }
+  };
+
+  function translateMapControls(container) {
+    for (const [selector, label] of [[".leaflet-control-zoom-in", "Zoom in"], [".leaflet-control-zoom-out", "Zoom out"]]) {
+      const control = container.querySelector(selector);
+      if (control) {
+        control.title = t(label);
+        control.setAttribute("aria-label", t(label));
+      }
+    }
+  }
+
   const STORAGE_KEY = "mavmole.dashboard.v1";
   const ESRI_SATELLITE_TILES = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
   const PROFILE_FORMAT = "mavmole-dashboard";
@@ -183,12 +284,12 @@
     }
 
     if (unit === "kt") {
-      return { value: (metersPerSecond * 1.943844).toFixed(1), unit: "kt" };
+      return { value: number(metersPerSecond * 1.943844, 1), unit: "kt" };
     }
     if (unit === "kmh") {
-      return { value: (metersPerSecond * 3.6).toFixed(1), unit: "km/h" };
+      return { value: number(metersPerSecond * 3.6, 1), unit: "km/h" };
     }
-    return { value: metersPerSecond.toFixed(1), unit: "m/s" };
+    return { value: number(metersPerSecond, 1), unit: "m/s" };
   }
 
   function formatAltitude(meters, unit) {
@@ -196,9 +297,9 @@
       return { value: "—", unit: unit === "ft" ? "ft" : "m" };
     }
     if (unit === "ft") {
-      return { value: (meters * 3.28084).toFixed(0), unit: "ft" };
+      return { value: number(meters * 3.28084), unit: "ft" };
     }
-    return { value: meters.toFixed(1), unit: "m" };
+    return { value: number(meters, 1), unit: "m" };
   }
 
   class SatelliteMap {
@@ -240,7 +341,7 @@
           interactive: false,
         }).addTo(this.map);
         this.tileLayer = leaflet.tileLayer(ESRI_SATELLITE_TILES, {
-          attribution: "Tiles &copy; Esri",
+          attribution: "&copy; Esri",
           maxZoom: 20,
         });
         let loadedTiles = 0;
@@ -252,7 +353,8 @@
           global.clearTimeout(this.loadTimer);
           this.container.parentElement.dataset.mapState = "satellite";
           this.setupElement.hidden = true;
-          this.statusElement.textContent = "Satellite";
+          this.failureMessage = null;
+          this.statusElement.textContent = t("Satellite");
           this.statusElement.title = "Esri World Imagery";
         };
         this.tileLayer.on("tileload", () => {
@@ -290,19 +392,34 @@
         icon,
         interactive: false,
         keyboard: false,
-        title: "Aircraft",
+        title: t("Aircraft"),
+        alt: t("Aircraft"),
         zIndexOffset: 500,
       }).addTo(this.map);
     }
 
     showFailure(error) {
       global.clearTimeout(this.loadTimer);
+      this.failureMessage = error.message;
       this.container.parentElement.dataset.mapState = "error";
-      this.statusElement.textContent = "Satellite unavailable";
-      this.statusElement.title = error.message;
-      this.setupTitle.textContent = "Satellite imagery could not load";
-      this.setupDetail.textContent = `${error.message} Check the internet connection and retry.`;
+      this.statusElement.textContent = t("Satellite unavailable");
+      this.statusElement.title = t(error.message);
+      this.setupTitle.textContent = t("Satellite imagery could not load");
+      this.setupDetail.textContent = t("{error} Check the internet connection and retry.", { error: t(error.message) });
       this.setupElement.hidden = false;
+    }
+
+    translate() {
+      if (this.failureMessage) {
+        this.showFailure({ message: this.failureMessage });
+      } else if (this.container.parentElement.dataset.mapState === "satellite") {
+        this.statusElement.textContent = t("Satellite");
+      }
+      const marker = this.marker?.getElement();
+      if (marker) {
+        marker.title = t("Aircraft");
+        marker.setAttribute("aria-label", t("Aircraft"));
+      }
     }
 
     reset() {
@@ -447,9 +564,10 @@
           worldCopyJump: true,
         });
         global.L.tileLayer(ESRI_SATELLITE_TILES, {
-          attribution: "Tiles &copy; Esri",
+          attribution: "&copy; Esri",
           maxZoom: 20,
         }).addTo(this.map);
+        translateMapControls(this.container);
         for (const [key, source] of Object.entries(this.sources)) {
           this.trails.set(
             key,
@@ -466,8 +584,16 @@
           this.resizeObserver.observe(this.container);
         }
       } catch (error) {
-        this.emptyElement.textContent = `GNSS map unavailable: ${error.message}`;
+        this.failureMessage = error.message;
+        this.translate();
       }
+    }
+
+    translate() {
+      translateMapControls(this.container);
+      this.emptyElement.textContent = this.failureMessage
+        ? t("GNSS map unavailable: {error}", { error: t(this.failureMessage) })
+        : t("Waiting for GNSS positions");
     }
 
     createMarker(key, source, position) {
@@ -481,6 +607,7 @@
       const marker = global.L.marker(position, {
         icon,
         title: config.label,
+        alt: config.label,
         zIndexOffset: config.zIndex,
       }).addTo(this.map);
       marker.bindTooltip(config.label, { direction: "top", offset: [0, -8] });
@@ -526,7 +653,7 @@
       }
       this.hasPosition = false;
       this.emptyElement.hidden = false;
-      this.emptyElement.textContent = "Waiting for GNSS positions";
+      this.translate();
       this.map?.setView([0, 0], 2, { animate: false });
     }
   }
@@ -637,14 +764,29 @@
         this.elements.mapSetupDetail,
       );
       this.gnssMap = new GnssMap(document.querySelector("#gnss-map"), this.elements.gnssEmpty);
-
       this.bindSettings();
       this.bindAdvancedWidgets();
       this.applySettings();
+      this.languageChangeHandler = () => this.translate();
+      global.addEventListener("mavmole:languagechange", this.languageChangeHandler);
       this.freshnessTimer = global.setInterval(() => {
         this.renderFreshness();
         this.renderAdvancedWidgets();
       }, 1000);
+    }
+
+    translate() {
+      this.satelliteMap.translate();
+      this.gnssMap.translate();
+      this.renderFreshness();
+      this.renderAirspeed(this.state?.airspeed);
+      this.renderAgl(this.state?.agl);
+      this.renderBattery(this.state);
+      this.renderAdvancedWidgets();
+      this.renderAllCustomWidgets();
+      this.renderWidgetSettings();
+      this.renderCustomWidgetSettings();
+      this.syncFieldOptions();
     }
 
     reset() {
@@ -917,27 +1059,29 @@
       const renderSource = (key, element, statusElement) => {
         const source = this.gnssState[key];
         if (!validCoordinates(source.lat, source.lon)) {
-          element.textContent = "Waiting for position";
+          element.textContent = t("Waiting for position");
           if (statusElement) {
-            statusElement.textContent = "No data";
+            statusElement.textContent = t("No data");
             statusElement.dataset.state = "waiting";
           }
           return;
         }
         const details = [`${source.lat.toFixed(7)}, ${source.lon.toFixed(7)}`];
         if (Number.isFinite(source.fix)) {
-          details.push(`fix ${source.fix}`);
+          details.push(t("fix {fix}", { fix: source.fix }));
         }
         if (Number.isFinite(source.satellites)) {
-          details.push(`${source.satellites} sats`);
+          details.push(t("{count} sats", { count: source.satellites }));
         }
         if (Number.isFinite(source.hdop)) {
-          details.push(`HDOP ${source.hdop.toFixed(2)}`);
+          details.push(`HDOP ${number(source.hdop, 2)}`);
         }
         element.textContent = details.join(" · ");
         if (statusElement) {
           const stale = now - source.updatedAt >= 5000;
-          statusElement.textContent = stale ? `${Math.round((now - source.updatedAt) / 1000)}s old` : "Live";
+          statusElement.textContent = stale
+            ? t("{seconds}s old", { seconds: number(Math.round((now - source.updatedAt) / 1000)) })
+            : t("Live");
           statusElement.dataset.state = stale ? "stale" : "live";
         }
       };
@@ -953,7 +1097,7 @@
           arrowElement.style.transform = "rotate(0deg)";
           return;
         }
-        valueElement.textContent = `${source.course.toFixed(1)}°`;
+        valueElement.textContent = `${number(source.course, 1)}°`;
         arrowElement.dataset.state = "live";
         arrowElement.style.transform = `rotate(${source.course}deg)`;
       };
@@ -965,14 +1109,14 @@
       const gps2 = this.gnssState.gps2;
       const pos = this.gnssState.pos;
       this.elements.gnssDrift.textContent = validCoordinates(gps1.lat, gps1.lon) && validCoordinates(gps2.lat, gps2.lon)
-        ? `${distanceMeters(gps1, gps2).toFixed(2)} m`
+        ? `${number(distanceMeters(gps1, gps2), 2)} m`
         : "—";
       this.elements.gnssPosOffset.textContent = validCoordinates(pos.lat, pos.lon) && validCoordinates(gps1.lat, gps1.lon)
-        ? `${distanceMeters(pos, gps1).toFixed(2)} m`
+        ? `${number(distanceMeters(pos, gps1), 2)} m`
         : "—";
       this.elements.gnssSatCurrent.textContent = Number.isFinite(gps2.satellites)
-        ? `${gps2.satellites} satellites`
-        : "Waiting for GPS2";
+        ? t("{count} satellites", { count: gps2.satellites })
+        : t("Waiting for GPS2");
 
       const samples = this.gnssState.satelliteHistory;
       const maximum = Math.max(20, ...samples.map((sample) => sample.value));
@@ -995,18 +1139,18 @@
       // This renderer runs for every telemetry update; keep it away from the
       // editable input so an in-progress value such as 1.22 is not clobbered.
       elements.value.textContent = Number.isFinite(metric.value)
-        ? `${metric.value.toFixed(definition.decimals)} ${definition.unit}`
+        ? `${number(metric.value, definition.decimals)} ${definition.unit}`
         : "—";
       const stale = metric.updatedAt === 0 || now - metric.updatedAt >= 5000;
       elements.status.textContent = metric.updatedAt === 0
-        ? "Waiting for MAVLink"
+        ? t("Waiting for MAVLink")
         : stale
-          ? `${Math.round((now - metric.updatedAt) / 1000)}s old`
+          ? t("{seconds}s old", { seconds: number(Math.round((now - metric.updatedAt) / 1000)) })
           : metric.value > threshold
-            ? "Above threshold"
-            : "Live";
+            ? t("Above threshold")
+            : t("Live");
       elements.status.dataset.state = metric.updatedAt === 0 ? "waiting" : stale ? "stale" : metric.value > threshold ? "alert" : "live";
-      elements.longest.textContent = `${longestAbove(metric.samples, threshold, now).toFixed(1)} s longest`;
+      elements.longest.textContent = t("{seconds} s longest", { seconds: number(longestAbove(metric.samples, threshold, now), 1) });
 
       const values = [...metric.samples.map((sample) => sample.value), threshold];
       let minimum = values.length > 0 ? Math.min(...values) : 0;
@@ -1051,7 +1195,7 @@
         }
 
         const value = this.temperatureState.values[index];
-        this.elements.escValues[index].textContent = Number.isFinite(value) ? `${value.toFixed(0)} °C` : "—";
+        this.elements.escValues[index].textContent = Number.isFinite(value) ? `${number(value)} °C` : "—";
         this.elements.escCards[index].dataset.state = stale || !Number.isFinite(value)
           ? "stale"
           : value >= critical
@@ -1067,36 +1211,36 @@
         element.setAttribute("y2", y);
       }
       this.elements.escSpread.textContent = currentValues.length > 1
-        ? `${(Math.max(...currentValues) - Math.min(...currentValues)).toFixed(1)} °C`
+        ? `${number(Math.max(...currentValues) - Math.min(...currentValues), 1)} °C`
         : "—";
       const shutdownTimes = trends
         .map((trend) => trend && trend.slope > 0.02 ? (critical - trend.value) / trend.slope : null)
         .filter((seconds) => Number.isFinite(seconds) && seconds >= 0);
       this.elements.escShutdown.textContent = shutdownTimes.length > 0
-        ? `${Math.min(...shutdownTimes).toFixed(0)} s`
-        : "No rising trend";
+        ? `${number(Math.min(...shutdownTimes))} s`
+        : t("No rising trend");
       this.elements.escStatus.textContent = this.temperatureState.updatedAt === 0
-        ? "Waiting for ESC_TELEMETRY_1_TO_4"
+        ? t("Waiting for ESC_TELEMETRY_1_TO_4")
         : stale
-          ? `Last update ${Math.round((now - this.temperatureState.updatedAt) / 1000)}s ago`
-          : "60s history · 20s linear forecast";
+          ? t("Last update {seconds}s ago", { seconds: number(Math.round((now - this.temperatureState.updatedAt) / 1000)) })
+          : t("60s history · 20s linear forecast");
       this.elements.escStatus.dataset.state = this.temperatureState.updatedAt === 0 ? "waiting" : stale ? "stale" : "live";
     }
 
     renderFreshness() {
       const timestamp = this.state?.lastTelemetryAt || 0;
       if (timestamp === 0) {
-        this.elements.freshness.textContent = "Waiting for MAVLink";
+        this.elements.freshness.textContent = t("Waiting for MAVLink");
         this.elements.freshness.dataset.state = "waiting";
         return;
       }
 
       const age = Date.now() - timestamp;
       if (age < 2500) {
-        this.elements.freshness.textContent = "Telemetry live";
+        this.elements.freshness.textContent = t("Telemetry live");
         this.elements.freshness.dataset.state = "live";
       } else {
-        this.elements.freshness.textContent = `Last update ${Math.round(age / 1000)}s ago`;
+        this.elements.freshness.textContent = t("Last update {seconds}s ago", { seconds: number(Math.round(age / 1000)) });
         this.elements.freshness.dataset.state = "stale";
       }
     }
@@ -1178,7 +1322,7 @@
       const formatted = formatSpeed(field?.value, this.settings.speedUnit);
       this.elements.airspeedValue.textContent = formatted.value;
       this.elements.airspeedUnit.textContent = formatted.unit;
-      this.elements.airspeedSource.textContent = field?.source || "No airspeed message";
+      this.elements.airspeedSource.textContent = t(field?.source || "No airspeed message");
       const percentage = Number.isFinite(field?.value)
         ? clamp((field.value / this.settings.airspeedScaleMps) * 100, 0, 100)
         : 0;
@@ -1189,7 +1333,7 @@
       const formatted = formatAltitude(field?.value, this.settings.altitudeUnit);
       this.elements.aglValue.textContent = formatted.value;
       this.elements.aglUnit.textContent = formatted.unit;
-      this.elements.aglSource.textContent = field?.source || "No AGL source";
+      this.elements.aglSource.textContent = t(field?.source || "No AGL source");
       const percentage = Number.isFinite(field?.value)
         ? clamp((field.value / this.settings.altitudeScaleM) * 100, 0, 100)
         : 0;
@@ -1200,8 +1344,8 @@
       const voltage = state?.batteryVoltage?.value;
       const current = state?.batteryCurrent?.value;
       const remaining = state?.batteryRemaining?.value;
-      this.elements.batteryVoltage.textContent = Number.isFinite(voltage) ? `${voltage.toFixed(1)} V` : "—";
-      this.elements.batteryCurrent.textContent = Number.isFinite(current) ? `${Math.abs(current).toFixed(1)} A` : "—";
+      this.elements.batteryVoltage.textContent = Number.isFinite(voltage) ? `${number(voltage, 1)} V` : "—";
+      this.elements.batteryCurrent.textContent = Number.isFinite(current) ? `${number(Math.abs(current), 1)} A` : "—";
       this.elements.batteryPower.textContent =
         Number.isFinite(voltage) && Number.isFinite(current) ? `${Math.round(voltage * Math.abs(current))} W` : "—";
       this.elements.batteryRemaining.textContent = Number.isFinite(remaining) ? `${remaining.toFixed(0)}%` : "—";
@@ -1209,7 +1353,7 @@
       this.elements.batteryBar.style.width = `${percentage}%`;
       this.elements.batteryBar.parentElement.setAttribute("aria-valuenow", String(percentage));
       this.elements.batterySource.textContent =
-        state?.batteryVoltage?.source || state?.batteryCurrent?.source || "No battery message";
+        t(state?.batteryVoltage?.source || state?.batteryCurrent?.source || "No battery message");
     }
 
     customWidgetTitle(widget) {
@@ -1223,8 +1367,8 @@
       article.innerHTML = `
         <header class="widget-heading custom-widget-heading">
           <div>
-            <span class="widget-kicker" data-role="message"></span>
-            <h3 data-role="title"></h3>
+            <span class="widget-kicker" data-role="message" data-i18n-ignore></span>
+            <h3 data-role="title" data-i18n-ignore></h3>
           </div>
           <span class="widget-symbol" data-role="kind"></span>
         </header>
@@ -1233,14 +1377,14 @@
       article.querySelector('[data-role="message"]').textContent = widget.messageName;
       article.querySelector('[data-role="title"]').textContent = this.customWidgetTitle(widget);
       article.querySelector('[data-role="kind"]').textContent =
-        widget.type === "chart" ? "TIME" : widget.type === "gauge" ? "GAUGE" : "VALUE";
+        t(widget.type === "chart" ? "TIME" : widget.type === "gauge" ? "GAUGE" : "VALUE");
 
       const content = article.querySelector('[data-role="content"]');
       if (widget.type === "value") {
         content.innerHTML = `
           <div class="custom-value-readout">
             <strong data-role="value">—</strong>
-            <span data-role="unit"></span>
+            <span data-role="unit" data-i18n-ignore></span>
           </div>`;
       } else if (widget.type === "gauge") {
         content.innerHTML = `
@@ -1249,18 +1393,19 @@
               <circle class="gauge-track" cx="60" cy="60" r="48" pathLength="100"></circle>
               <circle class="gauge-value" data-role="gauge-arc" cx="60" cy="60" r="48" pathLength="100"></circle>
             </svg>
-            <div class="gauge-readout"><strong data-role="value">—</strong><span data-role="unit"></span></div>
+            <div class="gauge-readout"><strong data-role="value">—</strong><span data-role="unit" data-i18n-ignore></span></div>
           </div>
           <div class="custom-range"><span data-role="minimum"></span><span data-role="maximum"></span></div>`;
       } else {
         content.innerHTML = `
-          <div class="chart-current"><strong data-role="value">—</strong><span data-role="unit"></span></div>
+          <div class="chart-current"><strong data-role="value">—</strong><span data-role="unit" data-i18n-ignore></span></div>
           <svg class="time-chart" viewBox="0 0 300 110" preserveAspectRatio="none" aria-label="Time based graph">
             <path class="chart-grid" d="M12 12H288 M12 52H288 M12 92H288 M12 12V92 M104 12V92 M196 12V92 M288 12V92"></path>
             <polyline class="chart-line" data-role="chart-line" points=""></polyline>
           </svg>
           <div class="custom-range"><span data-role="chart-min">—</span><span data-role="window"></span><span data-role="chart-max">—</span></div>`;
       }
+      global.MavMoleI18n?.apply(article);
       return article;
     }
 
@@ -1283,10 +1428,11 @@
         return "—";
       }
       const normalized = widget.absolute ? Math.abs(value) : value;
-      return normalized.toLocaleString(undefined, {
+      const options = {
         minimumFractionDigits: widget.decimals,
         maximumFractionDigits: widget.decimals,
-      });
+      };
+      return global.MavMoleI18n?.number(normalized, options) ?? normalized.toLocaleString(undefined, options);
     }
 
     renderCustomWidget(widget) {
@@ -1299,9 +1445,12 @@
       const displayValue = widget.absolute && Number.isFinite(value) ? Math.abs(value) : value;
       article.querySelector('[data-role="value"]').textContent = this.formatCustomValue(value, widget);
       article.querySelector('[data-role="unit"]').textContent = widget.unit;
+      article.querySelector('[data-role="kind"]').textContent =
+        t(widget.type === "chart" ? "TIME" : widget.type === "gauge" ? "GAUGE" : "VALUE");
+      article.querySelector(".time-chart")?.setAttribute("aria-label", t("Time based graph"));
       article.querySelector('[data-role="source"]').textContent = metadata
         ? `${widget.messageName}.${widget.fieldLabel}`
-        : `Waiting for ${widget.messageName}.${widget.fieldLabel}`;
+        : t("Waiting for {field}", { field: `${widget.messageName}.${widget.fieldLabel}` });
 
       if (widget.type === "gauge") {
         const range = widget.max - widget.min;
@@ -1309,15 +1458,15 @@
           ? clamp(((displayValue - widget.min) / range) * 100, 0, 100)
           : 0;
         article.querySelector('[data-role="gauge-arc"]').style.strokeDashoffset = String(100 - percentage);
-        article.querySelector('[data-role="minimum"]').textContent = `${widget.min}${widget.unit ? ` ${widget.unit}` : ""}`;
-        article.querySelector('[data-role="maximum"]').textContent = `${widget.max}${widget.unit ? ` ${widget.unit}` : ""}`;
+        article.querySelector('[data-role="minimum"]').textContent = `${number(widget.min, widget.decimals)}${widget.unit ? ` ${widget.unit}` : ""}`;
+        article.querySelector('[data-role="maximum"]').textContent = `${number(widget.max, widget.decimals)}${widget.unit ? ` ${widget.unit}` : ""}`;
       }
 
       if (widget.type === "chart") {
         const history = this.customHistory.get(widget.id) || [];
         const line = article.querySelector('[data-role="chart-line"]');
         const windowLabel = article.querySelector('[data-role="window"]');
-        windowLabel.textContent = `${widget.windowSeconds}s window`;
+        windowLabel.textContent = t("{seconds}s window", { seconds: widget.windowSeconds });
         if (history.length === 0) {
           line.setAttribute("points", "");
           return;
@@ -1340,8 +1489,8 @@
           return `${x.toFixed(1)},${y.toFixed(1)}`;
         });
         line.setAttribute("points", points.join(" "));
-        article.querySelector('[data-role="chart-min"]').textContent = minimum.toFixed(widget.decimals);
-        article.querySelector('[data-role="chart-max"]').textContent = maximum.toFixed(widget.decimals);
+        article.querySelector('[data-role="chart-min"]').textContent = number(minimum, widget.decimals);
+        article.querySelector('[data-role="chart-max"]').textContent = number(maximum, widget.decimals);
       }
     }
 
@@ -1412,7 +1561,7 @@
         try {
           await this.importDashboard(file);
         } catch (error) {
-          document.querySelector("#profile-status").textContent = error.message;
+          bindText(document.querySelector("#profile-status"), error.message);
         } finally {
           event.target.value = "";
         }
@@ -1448,12 +1597,16 @@
         row.innerHTML = `
           <label>
             <input type="checkbox" ${this.settings.visible[id] ? "checked" : ""}>
-            <span>${metadata.label}</span>
+            <span></span>
           </label>
           <div class="reorder-actions">
-            <button type="button" class="icon-button" data-direction="up" aria-label="Move ${metadata.label} up" ${index === 0 ? "disabled" : ""}>↑</button>
-            <button type="button" class="icon-button" data-direction="down" aria-label="Move ${metadata.label} down" ${index === this.settings.order.length - 1 ? "disabled" : ""}>↓</button>
+            <button type="button" class="icon-button" data-direction="up" ${index === 0 ? "disabled" : ""}>↑</button>
+            <button type="button" class="icon-button" data-direction="down" ${index === this.settings.order.length - 1 ? "disabled" : ""}>↓</button>
           </div>`;
+
+        row.querySelector("span").textContent = t(metadata.label);
+        row.querySelector('[data-direction="up"]').setAttribute("aria-label", t("Move {widget} up", { widget: t(metadata.label) }));
+        row.querySelector('[data-direction="down"]').setAttribute("aria-label", t("Move {widget} down", { widget: t(metadata.label) }));
 
         row.querySelector("input").addEventListener("change", (event) => {
           this.settings.visible[id] = event.target.checked;
@@ -1480,7 +1633,7 @@
       const placeholder = document.createElement("option");
       placeholder.value = "";
       placeholder.textContent =
-        this.observedMessages.size === 0 ? "Connect and receive MAVLink first" : "Select a MAVLink field";
+        t(this.observedMessages.size === 0 ? "Connect and receive MAVLink first" : "Select a MAVLink field");
       select.appendChild(placeholder);
 
       const messages = Array.from(this.observedMessages.values()).sort((first, second) =>
@@ -1488,6 +1641,7 @@
       );
       for (const message of messages) {
         const group = document.createElement("optgroup");
+        group.dataset.i18nIgnore = "";
         group.label = `${message.name} (#${message.id})`;
         const fields = Array.from(message.fields.values()).sort((first, second) =>
           first.fieldLabel.localeCompare(second.fieldLabel),
@@ -1518,11 +1672,11 @@
       const metadata = this.fieldRegistry.get(fieldKey);
       const status = document.querySelector("#custom-widget-status");
       if (!metadata) {
-        status.textContent = "Select a field received from the MAVLink stream.";
+        bindText(status, "Select a field received from the MAVLink stream.");
         return;
       }
       if (this.settings.customWidgets.length >= MAX_CUSTOM_WIDGETS) {
-        status.textContent = `The dashboard is limited to ${MAX_CUSTOM_WIDGETS} custom widgets.`;
+        bindText(status, "The dashboard is limited to {count} custom widgets.", { count: MAX_CUSTOM_WIDGETS });
         return;
       }
 
@@ -1541,14 +1695,14 @@
         windowSeconds: document.querySelector("#custom-widget-window").value,
       });
       if (!widget) {
-        status.textContent = "This widget configuration is invalid.";
+        bindText(status, "This widget configuration is invalid.");
         return;
       }
 
       this.settings.customWidgets.push(widget);
       this.commitSettings();
       this.renderCustomWidgetSettings();
-      status.textContent = `${this.customWidgetTitle(widget)} added.`;
+      bindText(status, "{widget} added.", { widget: this.customWidgetTitle(widget) });
       document.querySelector("#custom-widget-label").value = "";
     }
 
@@ -1558,7 +1712,7 @@
       if (this.settings.customWidgets.length === 0) {
         const empty = document.createElement("p");
         empty.className = "settings-empty";
-        empty.textContent = "No custom MAVLink widgets yet.";
+        empty.textContent = t("No custom MAVLink widgets yet.");
         list.appendChild(empty);
         return;
       }
@@ -1569,9 +1723,10 @@
         const label = document.createElement("div");
         label.className = "custom-setting-label";
         const strong = document.createElement("strong");
+        strong.dataset.i18nIgnore = "";
         strong.textContent = this.customWidgetTitle(widget);
         const small = document.createElement("small");
-        small.textContent = `${widget.type} · ${widget.messageName}.${widget.fieldLabel}`;
+        small.textContent = `${t({ value: "Value", chart: "Chart", gauge: "Gauge" }[widget.type])} · ${widget.messageName}.${widget.fieldLabel}`;
         label.append(strong, small);
 
         const actions = document.createElement("div");
@@ -1588,7 +1743,9 @@
           button.dataset.action = action;
           button.textContent = text;
           button.disabled = disabled;
-          button.setAttribute("aria-label", `${action} ${this.customWidgetTitle(widget)}`);
+          button.setAttribute("aria-label", t({ up: "Move {widget} up", down: "Move {widget} down", delete: "Delete {widget}" }[action], {
+            widget: this.customWidgetTitle(widget),
+          }));
           button.addEventListener("click", () => {
             if (action === "delete") {
               this.settings.customWidgets.splice(index, 1);
@@ -1624,14 +1781,21 @@
       link.download = `mavmole-dashboard-${new Date().toISOString().slice(0, 10)}.json`;
       link.click();
       global.setTimeout(() => URL.revokeObjectURL(url), 0);
-      document.querySelector("#profile-status").textContent = "Dashboard profile exported.";
+      bindText(document.querySelector("#profile-status"), "Dashboard profile exported.");
     }
 
     async importDashboard(file) {
       if (file.size > 512 * 1024) {
         throw new Error("Dashboard profile is too large.");
       }
-      const profile = JSON.parse(await file.text());
+      let profile;
+      try {
+        profile = JSON.parse(await file.text());
+      } catch (error) {
+        throw new Error(error instanceof SyntaxError
+          ? "The dashboard profile contains invalid JSON."
+          : "The dashboard profile could not be read.");
+      }
       if (profile?.format !== PROFILE_FORMAT || !profile.settings) {
         throw new Error("This is not a MavMole dashboard profile.");
       }
@@ -1641,7 +1805,7 @@
       this.renderWidgetSettings();
       this.renderCustomWidgetSettings();
       this.commitSettings();
-      document.querySelector("#profile-status").textContent = `Imported ${this.settings.customWidgets.length} custom widgets.`;
+      bindText(document.querySelector("#profile-status"), "Imported {count} custom widgets.", { count: this.settings.customWidgets.length });
     }
 
     commitSettings() {

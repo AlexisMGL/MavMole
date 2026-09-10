@@ -9,6 +9,16 @@ const derivePassword = promisify(scrypt);
 const DEFAULT_STREAM = "public";
 const STREAM_NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N} ._-]{0,47}$/u;
 
+function validateViewerLocation(value) {
+  if (!value || typeof value !== "object" ||
+      !Number.isFinite(value.latitude) || Math.abs(value.latitude) > 90 ||
+      !Number.isFinite(value.longitude) || Math.abs(value.longitude) > 180 ||
+      !Number.isFinite(value.accuracy) || value.accuracy < 0 || value.accuracy > 20_000_000) {
+    throw new TunnelError("INVALID_LOCATION", "Invalid viewer location.");
+  }
+  return { latitude: value.latitude, longitude: value.longitude, accuracy: value.accuracy };
+}
+
 class TunnelError extends Error {
   constructor(code, message) {
     super(message);
@@ -146,6 +156,8 @@ class ConnectionRegistry {
       label: null,
       active: false,
       joinedAt: Date.now(),
+      viewerId: role === ROLE.DIGGER ? randomUUID() : null,
+      location: null,
     };
     if (role === ROLE.MOLE) {
       metadata.sourceId = this.allocateSourceId(tunnel);
@@ -180,6 +192,7 @@ class ConnectionRegistry {
       role: metadata.role,
       sourceId: metadata.sourceId,
       label: metadata.label,
+      ...(metadata.role === ROLE.MOLE ? { viewerLocations: this.viewerLocations(socket) } : {}),
       sources: Array.from(metadata.tunnel.moles.entries())
         .map(([sourceId, moleSocket]) => ({ sourceId, metadata: this.metadata(moleSocket) }))
         .filter((source) => source.metadata?.active)
@@ -198,6 +211,31 @@ class ConnectionRegistry {
       label: metadata.label,
       stream: metadata.tunnel.name,
     };
+  }
+
+  updateViewerLocation(socket, value) {
+    const metadata = this.metadata(socket);
+    if (!metadata || metadata.role !== ROLE.DIGGER) {
+      throw new TunnelError("FORBIDDEN", "Only authenticated viewers can share their location.");
+    }
+    if (value === null) {
+      metadata.location = null;
+      return { viewerId: metadata.viewerId };
+    }
+    const location = validateViewerLocation(value);
+    metadata.location = { ...location, updatedAt: Date.now() };
+    return { viewerId: metadata.viewerId, ...metadata.location };
+  }
+
+  viewerLocations(socket) {
+    const metadata = this.metadata(socket);
+    if (!metadata || metadata.role !== ROLE.MOLE) {
+      return [];
+    }
+    return Array.from(metadata.tunnel.diggers)
+      .map((viewer) => this.metadata(viewer))
+      .filter((viewer) => viewer?.location)
+      .map((viewer) => ({ viewerId: viewer.viewerId, ...viewer.location }));
   }
 
   allInTunnel(socket, role) {
@@ -251,6 +289,7 @@ class ConnectionRegistry {
       tunnel.moles.delete(metadata.sourceId);
     } else {
       tunnel.diggers.delete(socket);
+      metadata.location = null;
     }
     this.socketMetadata.delete(socket);
     const removedTunnel = tunnel.moles.size === 0 && tunnel.diggers.size === 0;
@@ -307,4 +346,5 @@ module.exports = {
   DEFAULT_STREAM,
   TunnelError,
   normalizeStreamName,
+  validateViewerLocation,
 };

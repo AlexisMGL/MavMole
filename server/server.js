@@ -119,7 +119,7 @@ function createMavMoleServer() {
         "connect-src 'self' ws: wss: https://server.arcgisonline.com",
       ].join("; "),
       "Cross-Origin-Opener-Policy": "same-origin",
-      "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+      "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
       "X-Frame-Options": "DENY",
@@ -220,6 +220,12 @@ function createMavMoleServer() {
     }
   }
 
+  function broadcastViewerLocation(sourceSocket, message) {
+    for (const mole of connections.allInTunnel(sourceSocket, ROLE.MOLE)) {
+      sendControl(mole, message);
+    }
+  }
+
   websocketServer.on("connection", (socket, request, role) => {
     socket.isAlive = true;
     socket.requestedRole = role;
@@ -306,7 +312,33 @@ function createMavMoleServer() {
         return;
       }
 
-      if (!isBinary || metadata.role !== ROLE.MOLE) {
+      if (!isBinary) {
+        if (data.length > 1024) {
+          return;
+        }
+        let message;
+        try {
+          message = JSON.parse(data.toString());
+        } catch (_error) {
+          return;
+        }
+        if (!["viewer.location.share", "viewer.location.stop"].includes(message?.type)) {
+          return;
+        }
+        try {
+          const sharing = message.type === "viewer.location.share";
+          const location = connections.updateViewerLocation(socket, sharing ? message.location : null);
+          broadcastViewerLocation(socket, {
+            type: sharing ? "viewer.location.updated" : "viewer.location.removed",
+            ...location,
+          });
+          sendControl(socket, { type: "viewer.location.status", sharing });
+        } catch (error) {
+          sendControl(socket, { type: "viewer.location.error", code: error.code || "INVALID_LOCATION" });
+        }
+        return;
+      }
+      if (metadata.role !== ROLE.MOLE) {
         return;
       }
       if (!metadata.active && containsMavlinkFrame(socket, data)) {
@@ -329,6 +361,12 @@ function createMavMoleServer() {
     socket.on("close", (code, reason) => {
       clearTimeout(authTimer);
       const closingMetadata = connections.metadata(socket);
+      if (closingMetadata?.role === ROLE.DIGGER && closingMetadata.location) {
+        broadcastViewerLocation(socket, {
+          type: "viewer.location.removed",
+          viewerId: closingMetadata.viewerId,
+        });
+      }
       if (closingMetadata?.role === ROLE.MOLE && closingMetadata.active) {
         broadcastInTunnel(socket, {
           type: "stream.mole_left",

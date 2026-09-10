@@ -8,6 +8,9 @@
   const SOURCE_COLOURS = ["#d95d39", "#3478c7", "#2e9b68", "#9b59b6", "#d29b21", "#168c96", "#cb4b78"];
   const log = window.MavMoleLog.scope("Digger");
   const ui = window.MavMoleUi;
+  const i18n = window.MavMoleI18n;
+  const t = (key, variables) => i18n.t(key, variables);
+  const locationSharing = window.MavMoleViewerLocations.createSharing();
   const form = document.querySelector("#digger-tunnel-form");
   const connectButton = document.querySelector("#connect-button");
   const disconnectButton = document.querySelector("#disconnect-button");
@@ -29,6 +32,7 @@
   let relayAuthenticated = false;
   let activeSourceId = null;
   let sourceColourIndex = 0;
+  let lastFrameBuffer = null;
   const sources = new Map();
 
   const stats = new ui.StreamStats({
@@ -53,8 +57,9 @@
       this.layers = new Map();
       this.map = window.L.map(element, {
         attributionControl: true,
-        zoomControl: true,
+        zoomControl: false,
       }).setView([20, 0], 2);
+      window.L.control.zoom({ zoomInTitle: t("Zoom in"), zoomOutTitle: t("Zoom out") }).addTo(this.map);
       window.L.tileLayer(ESRI_SATELLITE_TILES, {
         attribution: "Tiles &copy; Esri",
         maxZoom: 19,
@@ -231,7 +236,7 @@
   function describeFrame(arrayBuffer) {
     const bytes = new Uint8Array(arrayBuffer);
     const preview = Array.from(bytes.slice(0, 32), (byte) => byte.toString(16).padStart(2, "0")).join(" ");
-    return bytes.byteLength + " bytes\n" + preview + (bytes.byteLength > 32 ? " ..." : "");
+    return t("{count} bytes", { count: bytes.byteLength }) + "\n" + preview + (bytes.byteLength > 32 ? " ..." : "");
   }
 
   function sourceLabel(sourceId) {
@@ -297,7 +302,7 @@
     if (sources.size === 0) {
       const empty = document.createElement("p");
       empty.className = "fleet-source-empty";
-      empty.textContent = "No Mole has shared MAVLink yet.";
+      empty.textContent = t("No Mole has shared MAVLink yet.");
       sourceList.appendChild(empty);
       return;
     }
@@ -312,11 +317,12 @@
       button.dataset.state = source.online ? "online" : "offline";
       button.setAttribute("aria-pressed", String(source.id === activeSourceId));
       title.textContent = source.label;
-      state.textContent = source.online
+      title.dataset.i18nIgnore = "";
+      state.textContent = t(source.online
         ? source.lastFrameAt > 0
           ? "Live MAVLink"
           : "Connected · waiting for data"
-        : "Disconnected · trail fading";
+        : "Disconnected · trail fading");
       copy.append(title, state);
       button.appendChild(copy);
       button.addEventListener("click", () => selectSource(source.id));
@@ -327,10 +333,10 @@
   function updateFleetStatus() {
     const active = Array.from(sources.values()).filter((source) => source.online && source.lastFrameAt > 0).length;
     if (active === 0) {
-      fleetStatus.textContent = relayAuthenticated ? "Waiting for Mole data" : "Connect to a tunnel";
+      fleetStatus.textContent = t(relayAuthenticated ? "Waiting for Mole data" : "Connect to a tunnel");
       fleetStatus.dataset.state = "waiting";
     } else {
-      fleetStatus.textContent = active + " active Mole" + (active === 1 ? "" : "s");
+      fleetStatus.textContent = t(active === 1 ? "{count} active Mole" : "{count} active Moles", { count: active });
       fleetStatus.dataset.state = "live";
     }
   }
@@ -357,7 +363,7 @@
     sources.clear();
     activeSourceId = null;
     sourceColourIndex = 0;
-    activeMoleLabel.textContent = "No Mole selected";
+    activeMoleLabel.textContent = t("No Mole selected");
     sourceList.replaceChildren();
     fleetMap.reset();
     renderSourceList();
@@ -365,6 +371,7 @@
   }
 
   function handleControl(control) {
+    locationSharing.handleControl(control);
     if (control.type === "stream.presence") {
       ui.renderViewerCount(viewerCount, control.viewers);
       ui.renderMoleCount(moleCount, control.moles);
@@ -395,7 +402,9 @@
       }
     }
     if (messages.length > 0) {
-      ui.setStatus(receivingStatus, "Receiving " + sources.size + " separated MAVLink source" + (sources.size === 1 ? "" : "s"), "connected");
+      const key = sources.size === 1 ? "Receiving {count} separated MAVLink source" : "Receiving {count} separated MAVLink sources";
+      ui.setStatus(receivingStatus, key, "connected");
+      i18n.bind(receivingStatus, key, { count: sources.size });
     } else {
       ui.setStatus(receivingStatus, "Receiving binary stream", "connected");
     }
@@ -405,6 +414,7 @@
   }
 
   function disconnect(updateStatuses = true) {
+    locationSharing.disconnect();
     const oldSocket = relaySocket;
     relaySocket = null;
     relayAuthenticated = false;
@@ -413,7 +423,7 @@
     }
     setControls(false);
     resetSources();
-    tunnelId.textContent = "Not joined";
+    tunnelId.textContent = t("Not joined");
     tunnelId.removeAttribute("data-tunnel-id");
     if (updateStatuses) {
       ui.setStatus(relayStatus, "Disconnected", "idle");
@@ -435,9 +445,16 @@
     disconnect(false);
     stats.reset();
     dashboard.reset();
-    lastFrame.textContent = "No frame received yet.";
+    lastFrameBuffer = null;
+    lastFrame.textContent = t("No frame received yet.");
     const relayUrl = ui.relayWebSocketUrl("digger");
-    const socket = new WebSocket(relayUrl);
+    let socket;
+    try {
+      socket = new WebSocket(relayUrl);
+    } catch (_error) {
+      ui.setStatus(relayStatus, "Connection blocked", "error");
+      return;
+    }
     socket.binaryType = "arraybuffer";
     relaySocket = socket;
     setControls(true);
@@ -461,6 +478,7 @@
       const envelope = ui.unpackRelayFrame(event.data);
       const byteLength = envelope.payload.byteLength ?? 0;
       stats.record(byteLength);
+      lastFrameBuffer = envelope.payload;
       lastFrame.textContent = describeFrame(envelope.payload);
       try {
         const mavlinkMessages = ingestSourceFrame(envelope.sourceId, envelope.payload);
@@ -487,14 +505,16 @@
       }
       relaySocket = null;
       relayAuthenticated = false;
+      locationSharing.disconnect();
       setControls(false);
-      tunnelId.textContent = "Not joined";
+      tunnelId.textContent = t("Not joined");
       tunnelId.removeAttribute("data-tunnel-id");
       ui.setStatus(
         relayStatus,
-        event.reason || "Closed (code " + event.code + ")",
+        "Closed (code {code})",
         event.code === 1000 ? "idle" : "error",
       );
+      i18n.bind(relayStatus, "Closed (code {code})", { code: event.code });
       ui.setStatus(receivingStatus, "Stopped", "idle");
       ui.renderViewerCount(viewerCount, 0);
       ui.renderMoleCount(moleCount, 0);
@@ -510,6 +530,7 @@
         return;
       }
       relayAuthenticated = true;
+      locationSharing.connect(socket);
       tunnelId.textContent = joined.tunnelId.slice(0, 8);
       tunnelId.dataset.tunnelId = joined.tunnelId;
       tunnelId.title = joined.tunnelId;
@@ -518,9 +539,11 @@
       }
       ui.setStatus(
         relayStatus,
-        "Connected · " + joined.stream + (joined.secureTransport ? " · TLS" : " · local unencrypted transport"),
+        joined.secureTransport ? "Connected · {stream} · TLS" : "Connected · {stream} · local unencrypted transport",
         "connected",
       );
+      i18n.bind(relayStatus, joined.secureTransport ? "Connected · {stream} · TLS" :
+        "Connected · {stream} · local unencrypted transport", { stream: joined.stream });
       ui.setStatus(receivingStatus, "Waiting for Mole data", "connected");
       updateFleetStatus();
       fleetMap.invalidate();
@@ -554,7 +577,7 @@
         selectSource(replacement.id);
       } else {
         activeSourceId = null;
-        activeMoleLabel.textContent = "No Mole selected";
+        activeMoleLabel.textContent = t("No Mole selected");
         dashboard.reset();
       }
     }
@@ -562,14 +585,34 @@
     updateFleetStatus();
   }, 10000);
 
-  ui.loadPublicStreams().then((streams) => {
+  let publicStreams = [];
+  function renderPublicStreams() {
     const list = document.querySelector("#public-stream-list");
-    list.replaceChildren(...streams.map((stream) => {
+    list.replaceChildren(...publicStreams.map((stream) => {
       const option = document.createElement("option");
       option.value = stream.name;
-      option.label = stream.moles + " active Moles · " + stream.viewers + " viewers";
+      option.label = t("{moles} active Moles · {viewers} viewers", stream);
       return option;
     }));
+  }
+  window.addEventListener("mavmole:languagechange", () => {
+    renderSourceList();
+    updateFleetStatus();
+    renderPublicStreams();
+    if (!relayAuthenticated) tunnelId.textContent = t("Not joined");
+    activeMoleLabel.textContent = sources.get(activeSourceId)?.label || t("No Mole selected");
+    lastFrame.textContent = lastFrameBuffer ? describeFrame(lastFrameBuffer) : t("No frame received yet.");
+    for (const [selector, key] of [[".leaflet-control-zoom-in", "Zoom in"], [".leaflet-control-zoom-out", "Zoom out"]]) {
+      const control = document.querySelector("#fleet-map " + selector);
+      if (control) {
+        control.title = t(key);
+        control.setAttribute("aria-label", t(key));
+      }
+    }
+  });
+  ui.loadPublicStreams().then((streams) => {
+    publicStreams = streams;
+    renderPublicStreams();
   }).catch(() => {});
   ui.loadServiceStats().then((serviceStats) => {
     ui.renderStreamCount(activeStreamCount, serviceStats.streams);

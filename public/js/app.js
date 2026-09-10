@@ -1,16 +1,25 @@
 (function createMavMoleUi(global) {
   "use strict";
 
+  const i18n = global.MavMoleI18n;
+  const t = (source, variables) => i18n ? i18n.t(source, variables) : source.replace(/\{(\w+)\}/g,
+    (match, name) => typeof variables?.[name] === "function" ? variables[name]() : variables?.[name] ?? match);
+  const number = (value, options) => i18n ? i18n.number(value, options) : new Intl.NumberFormat("en", options).format(value);
+  const bind = (element, source, variables) => {
+    if (i18n) i18n.bind(element, source, variables);
+    else element.textContent = t(source, variables);
+  };
+
   function formatBytes(value) {
     if (value < 1024) {
-      return `${value} B`;
+      return `${number(value)} B`;
     }
 
     if (value < 1024 * 1024) {
-      return `${(value / 1024).toFixed(1)} KiB`;
+      return `${number(value / 1024, { minimumFractionDigits: 1, maximumFractionDigits: 1 })} KiB`;
     }
 
-    return `${(value / (1024 * 1024)).toFixed(2)} MiB`;
+    return `${number(value / (1024 * 1024), { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MiB`;
   }
 
   function relayWebSocketUrl(role) {
@@ -19,7 +28,7 @@
   }
 
   function setStatus(element, text, state = "idle") {
-    element.textContent = text;
+    bind(element, text);
     element.dataset.state = state;
   }
 
@@ -112,17 +121,17 @@
 
   function renderViewerCount(element, count) {
     const viewers = Math.max(0, Number.parseInt(count, 10) || 0);
-    element.textContent = `${viewers} viewer${viewers === 1 ? "" : "s"}`;
+    bind(element, viewers === 1 ? "{count} viewer" : "{count} viewers", { count: () => number(viewers) });
   }
 
   function renderStreamCount(element, count) {
     const streams = Math.max(0, Number.parseInt(count, 10) || 0);
-    element.textContent = streams + " stream" + (streams === 1 ? "" : "s");
+    bind(element, streams === 1 ? "{count} stream" : "{count} streams", { count: () => number(streams) });
   }
 
   function renderMoleCount(element, count) {
     const moles = Math.max(0, Number.parseInt(count, 10) || 0);
-    element.textContent = moles + " active Mole" + (moles === 1 ? "" : "s");
+    bind(element, moles === 1 ? "{count} active Mole" : "{count} active Moles", { count: () => number(moles) });
   }
 
   function showMoleNotice(container, message) {
@@ -135,11 +144,15 @@
     const title = document.createElement("strong");
     const detail = document.createElement("span");
     const close = document.createElement("button");
-    title.textContent = "New Mole sharing MAVLink";
-    detail.textContent = (message.label || "A Mole") + " joined " + (message.stream || "this stream") + ".";
+    bind(title, "New Mole sharing MAVLink");
+    bind(detail, "{label} joined {stream}.", {
+      label: () => message.label || t("A Mole"),
+      stream: () => message.stream || t("this stream"),
+    });
     close.type = "button";
     close.className = "mole-notice-close";
-    close.setAttribute("aria-label", "Dismiss notification");
+    close.setAttribute("data-i18n-aria-label", "Dismiss notification");
+    close.setAttribute("aria-label", t("Dismiss notification"));
     close.textContent = "×";
     copy.append(title, detail);
     notice.append(copy, close);
@@ -161,7 +174,7 @@
   async function loadServiceStats() {
     const response = await fetch("/api/stats", { cache: "no-store" });
     if (!response.ok) {
-      throw new Error("Service statistics are unavailable.");
+      throw new Error(t("Service statistics are unavailable."));
     }
     return response.json();
   }
@@ -169,13 +182,17 @@
   async function loadPublicStreams() {
     const response = await fetch("/api/streams", { cache: "no-store" });
     if (!response.ok) {
-      throw new Error("Public stream list is unavailable.");
+      throw new Error(t("Public stream list is unavailable."));
     }
     const payload = await response.json();
     return Array.isArray(payload.streams) ? payload.streams : [];
   }
 
   function waitForOpen(socket, label) {
+    const connectionError = (key, variables) => Object.assign(new Error(t(key, variables)), {
+      i18nKey: key,
+      i18nVariables: variables,
+    });
     return new Promise((resolve, reject) => {
       const onOpen = () => {
         cleanup();
@@ -183,11 +200,11 @@
       };
       const onError = () => {
         cleanup();
-        reject(new Error(`${label} connection failed.`));
+        reject(connectionError("{label} connection failed.", { label: () => t(label) }));
       };
       const onClose = (event) => {
         cleanup();
-        reject(new Error(`${label} closed before connecting (code ${event.code}).`));
+        reject(connectionError("{label} closed before connecting (code {code}).", { label: () => t(label), code: event.code }));
       };
       const cleanup = () => {
         socket.removeEventListener("open", onOpen);
@@ -210,6 +227,7 @@
       this.sampleBytes = 0;
       this.sampleTime = performance.now();
       this.timer = window.setInterval(() => this.renderRate(), 1000);
+      global.addEventListener("mavmole:languagechange", () => this.render());
       this.render();
     }
 
@@ -235,11 +253,11 @@
     }
 
     render() {
-      this.elements.frames.textContent = this.frames.toLocaleString();
+      this.elements.frames.textContent = number(this.frames);
       this.elements.bytes.textContent = formatBytes(this.bytes);
 
       if (this.elements.dropped) {
-        this.elements.dropped.textContent = this.dropped.toLocaleString();
+        this.elements.dropped.textContent = number(this.dropped);
       }
     }
 

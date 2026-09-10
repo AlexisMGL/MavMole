@@ -3,6 +3,9 @@
 
   const log = window.MavMoleLog.scope("Mole");
   const ui = window.MavMoleUi;
+  const i18n = window.MavMoleI18n;
+  const t = (key, variables) => i18n.t(key, variables);
+  const viewerMap = window.MavMoleViewerLocations.createMap();
   const form = document.querySelector("#mole-form");
   const localUrlInput = document.querySelector("#local-url");
   const connectLocalButton = document.querySelector("#connect-local-button");
@@ -60,10 +63,10 @@
     localUrlInput.disabled = connectForwardPending || localBusy || localConnected;
     connectForwardButton.disabled = connectForwardPending || forwardingRequested || Boolean(relaySocket);
     connectForwardButton.textContent = connectForwardPending
-      ? "Connecting + forwarding…"
+      ? t("Connecting + forwarding…")
       : forwardingRequested || relaySocket
-        ? "Connected + forwarding"
-        : "Connect + forward";
+        ? t("Connected + forwarding")
+        : t("Connect + forward");
     stopForwardingButton.disabled = !forwardingRequested && !relaySocket;
     const tunnelLocked = connectForwardPending || Boolean(relaySocket);
     tunnelMode.disabled = tunnelLocked;
@@ -89,11 +92,11 @@
     privateStreamLabel.hidden = joining;
     privateStream.disabled = joining || Boolean(relaySocket) || connectForwardPending;
     streamPassword.required = !joining && privateStream.checked;
-    streamPassword.placeholder = joining ? "Required only for private tunnels" : "Only for private streams";
+    streamPassword.placeholder = t(joining ? "Required only for private tunnels" : "Only for private streams");
     streamPassword.autocomplete = joining ? "current-password" : "new-password";
-    tunnelHelp.textContent = joining
+    tunnelHelp.textContent = t(joining
       ? "Use exactly the same stream name and password as the existing tunnel."
-      : "Public mode keeps the one-click demo behavior. Use a unique name to avoid mixing unrelated Moles.";
+      : "Public mode keeps the one-click demo behavior. Use a unique name to avoid mixing unrelated Moles.");
   }
 
   function closeSocket(socket, label) {
@@ -111,6 +114,7 @@
     relayAttempt += 1;
     forwardingRequested = false;
     relayAuthenticated = false;
+    viewerMap.disconnect();
     const oldRelay = relaySocket;
     relaySocket = null;
     closeSocket(oldRelay, "MavMole relay");
@@ -150,7 +154,8 @@
         dashboard.update(decoder.state, changed);
       }
       if (messages.length > 0) {
-        ui.setStatus(localStatus, `Connected · ${messages.length} MAVLink msg`, "connected");
+        ui.setStatus(localStatus, "Connected · {count} MAVLink msg", "connected");
+        i18n.bind(localStatus, "Connected · {count} MAVLink msg", { count: messages.length });
       }
     } catch (error) {
       stats.drop();
@@ -181,7 +186,8 @@
         throw new Error("The URL must start with ws:// or wss://.");
       }
     } catch (error) {
-      ui.setStatus(localStatus, error.message, "error");
+      ui.setStatus(localStatus, error.message === "The URL must start with ws:// or wss://."
+        ? error.message : "Invalid WebSocket URL.", "error");
       log.error("Invalid Mission Planner URL.", error);
       renderControls();
       return false;
@@ -237,9 +243,12 @@
         localStatus,
         automatic && event.code !== 1000
           ? "Auto-connect failed — retry when Mission Planner is ready"
-          : `Closed (code ${event.code})`,
+          : "Closed (code {code})",
         event.code === 1000 ? "idle" : "error",
       );
+      if (!automatic || event.code === 1000) {
+        i18n.bind(localStatus, "Closed (code {code})", { code: event.code });
+      }
       ui.setStatus(relayStatus, "Not connected", "idle");
       ui.setStatus(forwardingStatus, "Off", "idle");
       renderControls();
@@ -336,6 +345,7 @@
         return;
       }
       const control = ui.parseRelayControl(event.data);
+      if (control) viewerMap.handleControl(control);
       if (control?.type === "stream.presence") {
         ui.renderViewerCount(viewerCount, control.viewers);
         ui.renderMoleCount(moleCount, control.moles);
@@ -356,13 +366,15 @@
       }
       relaySocket = null;
       relayAuthenticated = false;
+      viewerMap.disconnect();
       const wasRequested = forwardingRequested;
       forwardingRequested = false;
       ui.renderViewerCount(viewerCount, 0);
       ui.renderMoleCount(moleCount, 0);
       tunnelId.textContent = "—";
       tunnelId.removeAttribute("data-tunnel-id");
-      ui.setStatus(relayStatus, `Closed (code ${event.code})`, event.code === 1000 ? "idle" : "error");
+      ui.setStatus(relayStatus, "Closed (code {code})", event.code === 1000 ? "idle" : "error");
+      i18n.bind(relayStatus, "Closed (code {code})", { code: event.code });
       ui.setStatus(forwardingStatus, wasRequested ? "Off — relay closed" : "Off", wasRequested ? "error" : "idle");
       renderControls();
       log.warn("Relay connection closed; the local dashboard is still active.", { code: event.code, reason: event.reason });
@@ -378,14 +390,17 @@
         return;
       }
       relayAuthenticated = true;
+      viewerMap.connect(joined.viewerLocations || []);
       tunnelId.textContent = joined.tunnelId.slice(0, 8);
       tunnelId.dataset.tunnelId = joined.tunnelId;
       tunnelId.title = joined.tunnelId;
       ui.setStatus(
         relayStatus,
-        "Connected · " + joined.stream + (joined.secureTransport ? " · TLS" : " · local unencrypted transport"),
+        joined.secureTransport ? "Connected · {stream} · TLS" : "Connected · {stream} · local unencrypted transport",
         "connected",
       );
+      i18n.bind(relayStatus, joined.secureTransport ? "Connected · {stream} · TLS" :
+        "Connected · {stream} · local unencrypted transport", { stream: joined.stream });
       ui.setStatus(forwardingStatus, "Forwarding binary frames", "connected");
       renderControls();
       log.info("Relay forwarding is active.");
@@ -396,6 +411,7 @@
       log.error("Could not start relay forwarding.", error);
       forwardingRequested = false;
       relayAuthenticated = false;
+      viewerMap.disconnect();
       relaySocket = null;
       closeSocket(socket, "MavMole relay");
       ui.setStatus(relayStatus, error.message, "error");
@@ -419,18 +435,29 @@
     streamPassword.required = privateStream.checked;
   });
   window.addEventListener("beforeunload", () => disconnectLocal(false));
+  window.addEventListener("mavmole:languagechange", () => {
+    syncTunnelMode();
+    renderControls();
+    renderPublicStreams();
+  });
+
+  let publicStreams = [];
+  function renderPublicStreams() {
+    const list = document.querySelector("#public-stream-list");
+    list.replaceChildren(...publicStreams.map((stream) => {
+      const option = document.createElement("option");
+      option.value = stream.name;
+      option.label = t("{moles} active Moles · {viewers} viewers", stream);
+      return option;
+    }));
+  }
 
   const requestedMode = new URLSearchParams(window.location.search).get("mode");
   tunnelMode.value = requestedMode === "join" ? "join" : "create";
   syncTunnelMode();
   ui.loadPublicStreams().then((streams) => {
-    const list = document.querySelector("#public-stream-list");
-    list.replaceChildren(...streams.map((stream) => {
-      const option = document.createElement("option");
-      option.value = stream.name;
-      option.label = stream.moles + " active Moles · " + stream.viewers + " viewers";
-      return option;
-    }));
+    publicStreams = streams;
+    renderPublicStreams();
   }).catch(() => {});
   ui.loadServiceStats().then((serviceStats) => {
     ui.renderStreamCount(activeStreamCount, serviceStats.streams);

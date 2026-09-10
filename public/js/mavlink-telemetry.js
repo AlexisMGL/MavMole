@@ -66,7 +66,8 @@
       return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
     }
 
-    throw new TypeError("MAVLink data must be an ArrayBuffer or typed array.");
+    const message = "MAVLink data must be an ArrayBuffer or typed array.";
+    throw new TypeError(globalScope?.MavMoleI18n?.t(message) ?? message);
   }
 
   function crcAccumulate(byte, checksum) {
